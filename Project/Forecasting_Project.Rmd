@@ -1,0 +1,3700 @@
+---
+title: "Forecasting_Project"
+author: "VISHAL PATNAIK DAMODARAPATRUNI - s3811521"
+date: "03/10/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+This analysis has three parts: 
+    Task 1: Forecasting Mortality rate data.
+    Task 2: Forecasting First Flowering day data.
+    Task 3: Forecasting Rank-based Order similarity metric data.
+    
+## Task 1:
+
+  Here, we will forecast the Mortality rate data for the next four weeks using the best fit model. To get this best model we have three approaches.            
+    1. Suitable Distributed Lag and Dynamic LM
+    2. Smoothing methods
+    3. State Space models
+    
+  The best model is the one that has the best MASE score as well as gives the best residual analysis.
+
+## Task 2:
+
+  Here, we will forecast the First Flowering day data for the next three years using the best fit model. To get this best model we have three approaches.            
+    1. Suitable Distributed Lag and Dynamic LM (With and without slope)
+    2. Smoothing methods
+    3. State Space models
+    
+  The best model is the one that has the best MASE score as well as gives the best residual analysis.
+
+## Task C:
+  This again has 2 parts.
+      Part (a)
+      Part (b)
+
+  Part (a):
+    Here, we will forecast the Rank-based Order similarity metric data for the next three years using the best fit model among Distributed Lag and Dynamic LM
+    The best model is the one that has the best MASE score as well as gives the best residual analysis.
+    
+  Part (b):
+    Here, we will forecast the Rank-based Order similarity metric data during the Millennium drought period (1997 - 2009) for the next three years using the best fit model among Distributed Lag and Dynamic LM.
+    The best model is the one that has the best MASE score as well as gives the best residual analysis.
+
+
+# Method
+
+## Task 1
+
+The following packages are for all the three parts.
+
+```{r Library, message=FALSE, warning=FALSE}
+library(dplyr)
+library(forecast) # Forecasting Functions for Time Series and Linear Models. [1] - https://cran.r-project.org/web/packages/forecast/index.html
+library(dLagM) # Distributed lag model.
+library(lmtest) # Testing Linear Regression Models. [2] - https://cran.r-project.org/web/packages/lmtest/index.html
+library(tidyr)
+library(tseries) # Time Series Analysis and Computational Finance.[3] - https://cran.r-project.org/web/packages/tseries/index.html
+library(fUnitRoots) # To analyze trends and unit roots in financial time series. [4] - https://cran.r-project.org/web/packages/fUnitRoots/index.html
+library(expsmooth) # Forecasting with Exponential Smoothing. [5] - https://cran.r-project.org/web/packages/expsmooth/index.html
+library(TSA) # Time Series Analysis.
+library(urca) # Unit Root and Cointegration Tests. [7] - https://cran.r-project.org/web/packages/urca/index.html
+library(readr)
+library(xts)
+```
+
+## Data
+
+The data here used is the weekly averages of potential effects of both climate and pollution on disease specific mortality between the years 2010-2020.
+
+```{r DataLoading1}
+v_Mortality_data <- read.csv("mort.csv", header = TRUE)
+head(v_Mortality_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_Mortality_data)
+```
+
+Checking for Missing values.
+
+```{r scan 1}
+colSums(is.na(v_Mortality_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_Mortality_data (It should be a data frame.)
+
+```{r class1}
+class(v_Mortality_data)
+```
+
+Setting frequency = 365.27/7. Since weekly data.
+
+```{r TS}
+v_Mortality_data_TS <- ts(v_Mortality_data$mortality, start = c(2010, 1), frequency = (365.27/7))
+v_Mortality_temp_data_TS <- ts(v_Mortality_data$temp, start = c(2010, 1), frequency = (365.27/7))
+v_Mortality_chem1_data_TS <- ts(v_Mortality_data$chem1, start = c(2010, 1), frequency = (365.27/7))
+v_Mortality_chem2_data_TS <- ts(v_Mortality_data$chem2, start = c(2010, 1), frequency = (365.27/7))
+v_Mortality_particle.size_data_TS <- ts(v_Mortality_data$particle.size, start = c(2010, 1), frequency = (365.27/7))
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class1}
+class(v_Mortality_data_TS)
+class(v_Mortality_temp_data_TS)
+class(v_Mortality_chem1_data_TS)
+class(v_Mortality_chem2_data_TS)
+class(v_Mortality_particle.size_data_TS)
+```
+
+Now let us perform descriptive analysis on each time series object.
+
+## Descriptive Analysis
+
+### Mortality Rate
+
+```{r plotTS_Mort1}
+plot(v_Mortality_data_TS, type = "b", xlab = "weeks", ylab = "Mortality rate", main = "Time series plot for mortality rate from 2010 to 2020 (508 weeks)", pch = 1)
+legend("topright", inset = .03, title = "Rate", legend = "Mortality rate series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.1: Mortality Rate - Time series plot.
+
+```{r MT_Mort1}
+McLeod.Li.test(y = v_Mortality_data_TS, main = "McLeod-Li Test Statistics for Mortality Rate.")
+```
+
+Fig 1.2: McLeod-Li Test Statistics for Mortality Rate.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention at multiple points in the series.
+3.	From the series plot, we can conclude that there is seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  Therefore, there is no change Autoregressive and moving average behaviour.
+6.	Also, we cannot see change in variance.
+
+### Temperature
+
+```{r plotTS_Temp1}
+plot(v_Mortality_temp_data_TS, type = "b", xlab = "weeks", ylab = "Temperature", main = "Time series plot for temperature from 2010 to 2020 (508 weeks)", pch = 1)
+legend("top", inset = .03, title = "Temperature", legend = "Temperature series", horiz = TRUE, cex = 0.6, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.3: Temperature - Time series plot.
+
+```{r MT_Temp1}
+McLeod.Li.test(y = v_Mortality_temp_data_TS, main = "McLeod-Li Test Statistics for Temperature")
+```
+
+Fig 1.4: McLeod-Li Test Statistics for Precipitation.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention at multiple points in the series.
+3.	From the series plot, we can conclude that there is seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  Therefore, there is no change Autoregressive and moving average behaviour.
+6.	Also, we cannot see change in variance.
+
+### Chemical Emission 1
+
+```{r plotTS_Chem11}
+plot(v_Mortality_chem1_data_TS, type = "b", xlab = "weeks", ylab = "Chemical Emission 1", main = "Time series plot for Chemical Emission 1 from 2010 to 2020 (508 weeks)", pch = 1)
+legend("topright", inset = .03, title = "Chemical Emission 1", legend = "Chemical Emission 1 series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.3: Chemical Emission 1 - Time series plot.
+
+```{r MT_Pres}
+McLeod.Li.test(y = v_Mortality_chem1_data_TS, main = "McLeod-Li Test Statistics for Chemical Emission 1.")
+```
+
+Fig 1.4: McLeod-Li Test Statistics for Chemical Emission 1.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention at multiple points in the series.
+3.	From the series plot, we can conclude that there is seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  Therefore, there is no change Autoregressive and moving average behaviour.
+6.	Also, we cannot see change in variance.
+
+### Chemical Emission 2
+
+```{r plotTS_Chem21}
+plot(v_Mortality_chem2_data_TS, type = "b", xlab = "weeks", ylab = "Chemical Emission 2", main = "Time series plot for Chemical Emission 2 from 2010 to 2020 (508 weeks)", pch = 1)
+legend("topright", inset = .03, title = "Chemical Emission 2", legend = "Chemical Emission 2 series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.3: Chemical Emission 2 - Time series plot.
+
+```{r MT_Pres}
+McLeod.Li.test(y = v_Mortality_chem2_data_TS, main = "McLeod-Li Test Statistics for Chemical Emission 2.")
+```
+
+Fig 1.4: McLeod-Li Test Statistics for Chemical Emission 2.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data. But it seems like a downward trend.
+2.  There is an intervention at multiple points in the series.
+3.	From the series plot, we can conclude that there is seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  Therefore, there is no change Autoregressive and moving average behaviour.
+6.	Also, we cannot see change in variance.
+
+
+### Partical size
+
+```{r plotTS_Part1}
+plot(v_Mortality_particle.size_data_TS, type = "b", xlab = "weeks", ylab = "Partical size", main = "Time series plot for from 2010 to 2020 (508 weeks)", pch = 1)
+legend("topleft", inset = .03, title = "Partical size", legend = "Partical size", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.3: Partical size - Time series plot.
+
+```{r MT_Pres}
+McLeod.Li.test(y = v_Mortality_particle.size_data_TS, main = "McLeod-Li Test Statistics for Partical size")
+```
+
+Fig 1.4: McLeod-Li Test Statistics for Partical size.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention at multiple points in the series.
+3.	From the series plot, we can conclude that there is seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  Therefore, there is no change Autoregressive and moving average behaviour.
+6.	Also, we cannot see change in variance.
+
+
+## Checking for Stationary in the series
+
+```{r Stationary}
+# Function to check Stationary on the series. 
+Stationary_Check <- function(x, m1, m2) {
+  
+  # Analysing trends by plotting ACF and PACF.
+  par(mfrow = c(1,2))
+  acf(x, main = m1)
+  pacf(x, main = m2)
+  
+  # Lag for ADF test
+  d = ar(x)$order
+  
+  # Conducting Augmented Dickey-Fuller test.
+  adf.test(x, k = d)
+}
+```
+
+Checking for Stationary on Mortality Rate series.
+
+```{r Mort_Stationary1}
+Stationary_Check(v_Mortality_data_TS, "Mortality Rate - ACF plot", "Mortality Rate - PACF plot")
+```
+
+Fig 1.5: Mortality Rate - ACF
+Fig 1.6: Mortality Rate - ACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Mortality rate series is Stationary.
+
+Checking for Stationary on Temperature series.
+
+```{r Temp_Stationary1}
+Stationary_Check(v_Mortality_temp_data_TS, "Temperature - ACF plot", "Temperature - PACF plot")
+```
+
+Fig 1.7: Temperature - ACF
+Fig 1.8: Temperature - PACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Temperature series is Stationary.
+
+Checking for Stationary on Chemical Emission 1 series.
+
+```{r Chem1_Stationary1}
+Stationary_Check(v_Mortality_chem1_data_TS, "Chemical Emission 1 - ACF plot", "Chemical Emission 1 - PACF plot")
+```
+
+Fig 1.9: Chemical Emission 1 - ACF
+Fig 1.10: Chemical Emission 1 - PACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Chemical Emission 1 series is Stationary.
+
+Checking for Stationary on Chemical Emission 2 series.
+
+```{r Chem1_Stationary2}
+Stationary_Check(v_Mortality_chem2_data_TS, "Chemical Emission 2 - ACF plot", "Chemical Emission 2 - PACF plot")
+```
+
+Fig 1.11: Chemical Emission 2 - ACF
+Fig 1.12: Chemical Emission 2 - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the Chemical Emission 2 series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Chemical Emission 2 series is Stationary.
+
+Checking for Stationary on Particle Size data.
+
+```{r Part_Stationary1}
+Stationary_Check(v_Mortality_particle.size_data_TS, "Particle Size - ACF plot", "Particle Size - PACF plot")
+```
+
+Fig 1.13: Particle size - ACF
+Fig 1.14: Particle Size - PACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Particle size series is Stationary.
+
+
+Therefore, no differentiation is required. As the two series are stationary.
+
+
+## Impact of components on each time series.
+
+The components of a series are usually,
+
+  1. Seasonality
+  2. Trend
+  3. Remainder
+
+We should decompose the time series into the above components as we can see the impact of these components on the series data.
+
+For this STL decomposition is used, as there is intervention in some of the series. This intervention is might be due to outliers and STL decomposition is robust in the case of outliers.
+
+Decomposing Mortality series into components.
+
+```{r Mortality_STL1} 
+v_Mortality_stl_decomp <- stl(v_Mortality_data_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_Mortality_stl_decomp, main = "Decomposing Mortality Series into components")
+```
+
+Fig 1.15: Decomposing Mortality series into components - stl decomposition.
+
+  1. The seasonality component shows peaks at the same points suggesting some seasonality.
+  2. The trend in the series data is not shown by the trend component.
+  3. Remainder component shows a high intervention point around 2013.
+
+Decomposing Temperature series into components.
+
+```{r temp_STL} 
+v_temp_stl_decomp <- stl(v_Mortality_temp_data_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_temp_stl_decomp, main = "Decomposing Temperature Series into components")
+```
+
+Fig 1.16: Decomposing Temperature series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series. But we observed seasonality in the series. This makes that there is no sense in the seasonality components.
+  2. The trend in the series data is not shown by the trend component.
+  3. Remainder component shows no high intervention points.
+
+Decomposing Chemical Emission 1 series into components.
+
+```{r chem1_STL} 
+v_Chem1_stl_decomp <- stl(v_Mortality_chem1_data_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_Chem1_stl_decomp, main = "Decomposing Chemical Emission 1 Series into components")
+```
+
+Fig 1.17: Decomposing Chemical Emission 1 series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series. But we observed seasonality in the series. This makes that there is no sense in the seasonality components.
+  2. The trend in the series data is not shown by the trend component.
+  3. Remainder component shows a high intervention point at 2011 and 2015.
+
+Decomposing Chemical Emission 2 series into components.
+
+```{r chem2_STL} 
+v_Chem2_stl_decomp <- stl(v_Mortality_chem2_data_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_Chem2_stl_decomp, main = "Decomposing Chemical Emission 2 Series into components")
+```
+
+Fig 1.17: Decomposing Chemical Emission 2 series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series. But we observed seasonality in the series. This makes that there is no sense in the seasonality components.
+  2. The trend in the series data is shown exactly by the trend component.
+  3. Remainder component shows a high intervention point at multiple points.
+  
+  Decomposing COPPER price series into components.
+
+```{r Part_STL} 
+v_Part_stl_decomp <- stl(v_Mortality_particle.size_data_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_Part_stl_decomp, main = "Decomposing Particle price Series into components")
+```
+
+Fig 1.18: Decomposing Particle price series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series. But we observed seasonality in the series. This makes that there is no sense in the seasonality components.
+  2. The trend in the series data is shown by the trend component.
+  3. Remainder component shows a high intervention point at multiple points.
+  
+
+## Suitable distributed lag models (Multivariate Analysis).
+
+Before this let us find the correlation between the two series.
+
+```{r cor11}
+# Calculating the correlation coefficient
+cor(v_Mortality_data_TS, v_Mortality_temp_data_TS)
+cor(v_Mortality_data_TS, v_Mortality_chem1_data_TS)
+cor(v_Mortality_data_TS, v_Mortality_chem2_data_TS)
+cor(v_Mortality_data_TS, v_Mortality_particle.size_data_TS)
+```
+
+This suggests that Mortality rate has a strong correlation with Chemical emission 1 and Particle size.
+
+
+As we are going to forecast the Mortality Rate data our dependent variable "y" will be Mortality Rate series object and independent variable "x" will be Chemical emission 1 and Particle size. Since multivariate analysis. For this let us convert the entire data set into time series.
+
+```{r cor12}
+v_data_TS <- ts(v_Mortality_data, start = c(2010, 1), frequency = (365.27/7))
+cor(v_data_TS)
+```
+
+Convert column names.
+
+```{r col1}
+colnames(v_data_TS)<-c("n", "y", "x1", "x2", "x3", "x4")
+
+## Where y -> mortality
+## x1 -> temp
+## x2 -> chem1
+## x3 -> chem2
+## x4 -> particle.size
+```
+
+
+### Finite distributed lag model
+
+Getting q values for finite distributed lag model based on MASE values.
+
+```{r Dlag1}
+for ( i in 1:10){
+  model_1 = dlm(formula=y ~ x2 + x4, data = data.frame(v_data_TS), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+}
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_mort1}
+# Finite lag length based on AIC-BIC
+
+finite_dlm_mort = dlm(formula=y ~ x2 + x4, data = data.frame(v_data_TS), q = 10)
+summary(finite_dlm_mort)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model.
+  HA : The data fits the Finite distributed lag model.
+
+Interpretations:
+  F - statistic is 33.25 
+  R - squared is 0.6063
+  Adjusted R - squared is 0.5881
+  Degrees of freedom - DF are (22, 475)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Finite distributed lag model.
+
+This model suggests that there is only 58.81% of data variance. Suggesting that the model explains only 58.81% of the trend. Which implies that the model shows some trend.
+
+Now let us check the residual analysis.
+
+### Residual analysis
+
+```{r analysisfunc}
+# Function for residual analysis.
+
+res_analysis <- function(res_m) {
+  
+    par(mfrow = c(2, 2))
+    # Scatter plot for model residuals
+    plot(res_m, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Standardized Residuals", main = "Plot of Residuals over Time")
+
+    abline(h = 0)
+    
+    # Standard distribution
+    hist(res_m, xlab = 'Standardized Residuals', freq = FALSE)
+    curve(dnorm(x, mean = mean(res_m), sd = sd(res_m)), col = "red", lwd = 2, add = TRUE, yaxt = "n")
+    
+    # QQplot for model residuals
+    qqnorm(res_m, col = c("blue"))
+    qqline(res_m)
+    
+    # Auto-Correlation Plot
+    acf(res_m, main = "ACF of Standardized Residuals",col=c("blue"))
+    
+    # Shapiro Wilk test
+    shapiro.test(res_m)
+  
+}
+```
+
+
+
+```{r dlm_res1}
+res_analysis(residuals(finite_dlm_mort$model))
+```
+
+Residual Analysis for Finite DLM:
+
+  1. The data points are below the line at the start and above the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+### Polynomial distributed lag model
+
+Polynomial distributed lag model makes predictors with only one variable. There fore, let us fit models on the mortality rate separately.
+
+```{r}
+y = v_Mortality_data_TS # Independent variable
+x1 = v_Mortality_chem1_data_TS # Dependent variable
+x2 = v_Mortality_particle.size_data_TS # Dependent variable
+```
+
+
+#### Polynomial distributed lag model with Chemical emission 1
+
+
+```{r}
+for (i in 1:3){
+  model_2 <-  polyDlm(x = as.vector(x1) , y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model), "MASE =", MASE(model_2)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC, BIC and MASE scores.
+
+```{r polydlag_mort1}
+# Ploynomial DLM
+
+PolyDLM_model_mort_chem1 = polyDlm(x = as.vector(x1), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model_mort_chem1)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 97 
+  R - squared is 0.4369
+  Adjusted R - squared is 0.4324
+  Degrees of freedom - DF are (4, 500)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 43.24% of data variance. Suggesting that the model explains only 43.24% of the trend. Which implies that the model shows some trend.
+
+
+#### Residual analysis
+
+```{r polydlm_res1}
+res_analysis(residuals(PolyDLM_model_mort_chem1$model))
+```
+
+Residual Analysis for Polynomial DLM with Chem1:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+#### Polynomial distributed lag model with Particle size
+
+
+```{r}
+for (i in 1:3){
+  model_2 <-  polyDlm(x = as.vector(x2) , y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model), "MASE =", MASE(model_2)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC, BIC and MASE scores.
+
+```{r polydlag_part}
+# Ploynomial DLM
+
+PolyDLM_model_mort_part = polyDlm(x = as.vector(x2), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model_mort_part)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 47.55 
+  R - squared is 0.2756
+  Adjusted R - squared is 0.2698
+  Degrees of freedom - DF are (4, 500)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 26.98% of data variance. Suggesting that the model explains only 26.98% of the trend. Which implies that the model shows some trend.
+
+
+#### Residual analysis
+
+```{r polydlm_res2}
+res_analysis(residuals(PolyDLM_model_mort_part$model))
+```
+
+Residual Analysis for Polynomial DLM with part:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (0.0034) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit Koyck model in the similar war. Since it does not take multiple predictors.
+
+### Koyck model
+
+#### Koyck with Chemical Emission 1
+
+```{r koyck_Mort}
+# Koyk DLM
+
+Koyck_DLM_mort_chem1 = koyckDlm(x = as.vector(x1) , y = as.vector(y))
+summary(Koyck_DLM_mort_chem1)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 443.5 
+  R - squared is 0.6544
+  Adjusted R - squared is 0.653
+  Degrees of freedom - DF are (2, 504)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Koyck distributed lag model.
+
+This model suggests that there is only 65.3% of data variance. Suggesting that the model explains only 65.3% of the trend. Which implies that the model performs better on the series data when compared to the former model.
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r Koyckdlm_res1}
+res_analysis(residuals(Koyck_DLM_mort_chem1))
+```
+
+Residual Analysis for Koyck DLM:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.08876) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis cannot be rejected.
+
+#### Koyck with Particle size
+
+```{r koyck_Mort_part}
+# Koyk DLM
+
+Koyck_DLM_mort_part = koyckDlm(x = as.vector(x2) , y = as.vector(y))
+summary(Koyck_DLM_mort_part)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 400.4 
+  R - squared is 0.6236
+  Adjusted R - squared is 0.6221
+  Degrees of freedom - DF are (2, 504)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Koyck distributed lag model.
+
+This model suggests that there is only 62.21% of data variance. Suggesting that the model explains only 62.21% of the trend. Which implies that the model performs better on the series data when compared to the former model.
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r Koyckdlm_res11}
+res_analysis(residuals(Koyck_DLM_mort_part))
+```
+
+Residual Analysis for Koyck DLM:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.08584) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis cannot be rejected.
+
+
+So far Koyck with Chemical emission 1 is the best model but let us fit ardlDlm model to check whether it fits better than Koyck model or not.
+
+### Autoregressive distributed lag model
+
+This again takes multiple predictors.
+
+Getting p and q values for finite distributed lag model based on MASE values.
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(formula = y ~ x2 + x4, data = data.frame(v_data_TS), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 2); (5, 3) has the least AIC, BIC and MASE scores. 
+
+Let us fit (5, 2)
+
+```{r ardlm_mort_521}
+# ARDLM model
+AR_DLM_mort_52 = ardlDlm(formula = y ~ x2 + x4, data = data.frame(v_data_TS), p = 5, q = 2)
+summary(AR_DLM_mort_52)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 101.9 
+  R - squared is 0.7451
+  Adjusted R - squared is 0.7378 
+  Degrees of freedom - DF are (14, 488)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 73.78% of data variance. Suggesting that the model explains only 73.78% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r ardlm_mort_52_res1}
+res_analysis(residuals(AR_DLM_mort_52))
+```
+
+Residual Analysis for AR_DLM_mort_52:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.001518) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+
+Let us fit (5, 3)
+
+```{r ardlm_mort_531}
+# ARDLM model
+AR_DLM_mort_53 = ardlDlm(formula = y ~ x2 + x4, data = data.frame(v_data_TS), p = 5, q = 3)
+summary(AR_DLM_mort_53)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 95.07 
+  R - squared is 0.7454
+  Adjusted R - squared is 0.7376
+  Degrees of freedom - DF are (15, 487)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 73.76% of data variance. Suggesting that the model explains only 73.76% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r ardlm_solar_53_res1}
+res_analysis(residuals(AR_DLM_mort_53))
+```
+
+Residual Analysis for AR_DLM_mort_53:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.001518) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+So far AR model with order (5, 2) is better model.
+
+Now let us calculate AIC, BIC and MASE scores and store them in a dataframe to check the better model based on MASE score.
+
+```{r}
+attr(Koyck_DLM_mort_chem1$model, "class") = "lm"
+attr(Koyck_DLM_mort_part$model, "class") = "lm"
+attr(AR_DLM_mort_52$model, "class") = "lm"
+attr(AR_DLM_mort_53$model, "class") = "lm"
+
+v_model_name <- c("finite_dlm_mort", "PolyDLM_model_mort_chem1", "PolyDLM_model_mort_part", "Koyck_DLM_mort_chem1", "Koyck_DLM_mort_part", "AR_DLM_mort_52", "AR_DLM_mort_53")
+```
+
+
+```{r warning=FALSE}
+MASE <- MASE(finite_dlm_mort$model, PolyDLM_model_mort_chem1$model, PolyDLM_model_mort_part$model, Koyck_DLM_mort_chem1$model, Koyck_DLM_mort_part$model, AR_DLM_mort_52$model, AR_DLM_mort_53$model)$MASE
+
+aic <- AIC(finite_dlm_mort$model, PolyDLM_model_mort_chem1$model, PolyDLM_model_mort_part$model, Koyck_DLM_mort_chem1$model, Koyck_DLM_mort_part$model, AR_DLM_mort_52$model, AR_DLM_mort_53$model)$AIC
+
+bic <- BIC(finite_dlm_mort$model, PolyDLM_model_mort_chem1$model, PolyDLM_model_mort_part$model, Koyck_DLM_mort_chem1$model, Koyck_DLM_mort_part$model, AR_DLM_mort_52$model, AR_DLM_mort_53$model)$BIC
+```
+
+
+```{r score}
+v_score <- data.frame(v_model_name, MASE, aic, bic)
+colnames(v_score) <- c("MODEL_NAME", "MASE", "AIC", "BIC")
+v_score
+```
+
+Comparitively, AR_DLM_solar_53 is the better model in terms of MASE, AIC and BIC scores.
+
+Now let us fit dynamic lm model
+
+## Dynamic model
+
+```{r}
+v_mort_dyna <- dynlm(y ~ x2 + x4, data = data.frame(v_data_TS))
+summary(v_mort_dyna)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 117.1 
+  R - squared is 0.3168
+  Adjusted R - squared is 0.3141 
+  Degrees of freedom - DF are (2, 505)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Dynamic linear model.
+
+This model suggests that there is only 73.76% of data variance. Suggesting that the model explains only 73.76% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r v_mort_dyna_res1}
+res_analysis(residuals(v_mort_dyna))
+```
+
+Residual Analysis for v_mort_dyna:
+
+  1. The data points are above the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern
+  5. p - value (0.001518) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+## Exponential Smoothing
+
+Since the Seasonality component is week we cannot get additive and multiplicative seasonality. So let us fit with simple seasonality. Since, we need next 4 weeks point forecasts as well as confidence intervals, we used h = 4 (frequency).
+
+```{r}
+v_mort_ses <- ses(v_Mortality_data_TS, seasonal = "simple", h = 4)
+summary(v_mort_ses)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(v_mort_ses))
+```
+
+Residual Analysis analysis for simple seasonality:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+Now let us fit with damped trend.
+
+```{r}
+v_mort_exp <- holt(v_Mortality_data_TS, damped = TRUE, h = 4)
+summary(v_mort_exp)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(v_mort_exp))
+```
+
+Residual Analysis analysis for exponential trend:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Due to week seasonality in the series there is no additive or multiplicative seasonality also there will be no damped in the series.
+
+By exponential smoothing method we got the simple seasonal fit as the best model in terms of MASE and BIC scores. 
+
+
+## State Space Model Variations
+
+Let us find the best ets model. Before all let us auto fit the model.
+
+Since, the frequency is greater than 24 we cannot use ets() method. Therefore, stlf() is used.
+
+Since, we need next 4 weeks point forecasts as well as confidence intervals, we used h = 4 (frequency).
+
+```{r}
+v_stlf_fit <- stlf(v_Mortality_data_TS, h = 4)
+summary(v_stlf_fit)
+```
+
+STL + ETS(M, N, N)
+
+M - Multiplicative errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit)
+```
+
+Residual Analysis ETS(A, AD, A):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit ets variable combinations individually.
+
+```{r}
+v_ets_fit1 <- ets(v_Mortality_data_TS, model = "ANN")
+summary(v_ets_fit1)
+```
+
+ETS(A, N, N)
+
+A - Additive errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit1)
+```
+
+Residual Analysis ETS(A, N, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+```{r}
+v_ets_fit2 <- ets(v_Mortality_data_TS, model = "AAN")
+summary(v_ets_fit2)
+```
+
+ETS(A, A, N)
+
+A - Additive errors
+
+A - Additive trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit2)
+```
+
+Residual Analysis ETS(A, A, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+```{r}
+v_ets_fit3 <- ets(v_Mortality_data_TS, model = "MNN")
+summary(v_ets_fit3)
+```
+
+ETS(A, A, N)
+
+M - Multiplicative errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit3)
+```
+
+Residual Analysis ETS(M, N, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+```{r}
+v_ets_fit4 <- ets(v_Mortality_data_TS, model = "MAN")
+summary(v_ets_fit4)
+```
+
+ETS(A, A, N)
+
+M - Multiplicative errors
+
+A - Additive trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit4)
+```
+
+Residual Analysis ETS(M, A, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+```{r}
+v_ets_fit5 <- ets(v_Mortality_data_TS, model = "MMN")
+summary(v_ets_fit5)
+```
+
+ETS(M, M, N)
+
+M - Multiplicative errors
+
+M - Multiplicative trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_stlf_fit5)
+```
+
+Residual Analysis ETS(M, M, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+Comparitively, based on AIC, BIC and MASE scores ets(M, N, N) is better.
+
+## Forecasting
+
+Let us forecast the mortality rate for the next 4 weeks using the best model.
+
+```{r Fore1}
+fit <- ses(v_Mortality_data_TS, seasonal = "simple", h = 4)
+
+v_solar_forecasts <- ts.intersect(ts(fit$lower[, 2], start = c(2020), frequency = 356.27/7), ts(fit$mean, start = c(2020), frequency = 356.27/7), ts(fit$upper[, 2], start = c(2020), frequency = 356.27/7))
+colnames(v_solar_forecasts) <- c("Lower bound", "Point forecast", "Upper bound")
+
+v_solar_forecasts
+```
+
+Now let us plot the forecast.
+
+```{r Fore1}
+plot(fit, fcol = "white", main = "Forecast of Mortality rate series for the next 4 weeks", ylab = "Mortality rate")
+lines(fitted(fit), col = "red")
+lines(fit$mean, col = "blue", lwd = 2)
+legend("bottom", inset = .03, cex = 0.9, box.lty = 2, box.lwd = 2, pch = 1, lty = 1, col = c("red", "blue"), c("Data", "Forecasts"))
+```
+
+Fig 1.19: Next 4 weeks forecast on the Mortality rate Series.
+
+From the two year forecast results we can predict that there will be decrease in the mortality rate in the future.
+
+## Task 2
+
+## Data
+
+The data here used is the yearly averaged climate variables measured from 1984 – 2014 (31 years).
+
+```{r DataLoading2}
+v_First_Flowering_Day_data <- read.csv("FFD.csv", header = TRUE)
+head(v_First_Flowering_Day_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_First_Flowering_Day_data)
+```
+
+Checking for Missing values.
+
+```{r scan 2}
+colSums(is.na(v_First_Flowering_Day_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_solar_data. (It should be a data frame.)
+
+```{r class2}
+class(v_First_Flowering_Day_data)
+```
+
+```{r TS2}
+v_First_Flowering_Day_Temp_TS <- ts(v_First_Flowering_Day_data$Temperature, start = 1984, frequency = 1)
+v_First_Flowering_Day_Rainfall_TS <- ts(v_First_Flowering_Day_data$Rainfall, start = 1984, frequency = 1)
+v_First_Flowering_Day_Radiation_TS <- ts(v_First_Flowering_Day_data$Radiation, start = 1984, frequency = 1)
+v_First_Flowering_Day_RelHumidity_TS <- ts(v_First_Flowering_Day_data$RelHumidity, start = 1984, frequency = 1)
+v_First_Flowering_Day_data_TS <- ts(v_First_Flowering_Day_data$FFD, start = 1984, frequency = 1)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class2}
+class(v_First_Flowering_Day_Temp_TS)
+class(v_First_Flowering_Day_Rainfall_TS)
+class(v_First_Flowering_Day_Radiation_TS)
+class(v_First_Flowering_Day_RelHumidity_TS)
+class(v_First_Flowering_Day_data_TS)
+```
+
+Now let us perform descriptive analysis on each time series object.
+
+## Descriptive Analysis
+
+### First Flowering Day
+
+```{r plotTS_FDD2}
+plot(v_First_Flowering_Day_data_TS, type = "b", xlab = "years", ylab = "First Flowering Day", main = "Time series plot for yearly First Flowering Day data from 1984 – 2014 (31 years)", pch = 1)
+legend("topright", inset = .03, title = "First Flowering Day", legend = "First Flowering Day series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1.1: First Flowering Day - Time series plot.
+
+```{r MT_FFD2}
+McLeod.Li.test(y = v_First_Flowering_Day_data_TS, main = "McLeod-Li Test Statistics for First Flowering Day.")
+```
+
+Fig 2.2: McLeod-Li Test Statistics for First Flowering Day.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around multiple years.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Temperature
+
+```{r plotTS_temp2}
+plot(v_First_Flowering_Day_Temp_TS, type = "b", xlab = "years", ylab = "Temperature", main = "Time series plot for yearly temperature from 1984 – 2014 (31 years)", pch = 1)
+legend("top", inset = .03, title = "Temperature", legend = "Temperature series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.3: Temperature - Time series plot.
+
+```{r MT_temp2}
+McLeod.Li.test(y = v_First_Flowering_Day_Temp_TS, main = "McLeod-Li Test Statistics for Temperature")
+```
+
+Fig 2.4: McLeod-Li Test Statistics for Temperature
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1996.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Rainfall
+
+```{r plotTS_Rain2}
+plot(v_First_Flowering_Day_Rainfall_TS, type = "b", xlab = "years", ylab = "Rainfall", main = "Time series plot for yearly Rainfall from 1984 – 2014 (31 years)", pch = 1)
+legend("bottomleft", inset = .03, title = "Rainfall", legend = "Rainfall series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.5: Rainfall - Time series plot.
+
+```{r MT_Rain2}
+McLeod.Li.test(y = v_First_Flowering_Day_Rainfall_TS, main = "McLeod-Li Test Statistics for Rainfall")
+```
+
+Fig 2.6: McLeod-Li Test Statistics for Rainfall
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1996.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Radiation
+
+```{r plotTS_Rad2}
+plot(v_First_Flowering_Day_Radiation_TS, type = "b", xlab = "years", ylab = "Radiation", main = "Time series plot for yearly Radiation from 1984 – 2014 (31 years)", pch = 1)
+legend("topleft", inset = .03, title = "Radiation", legend = "Radiation series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.7: Solar radiation - Time series plot.
+
+```{r MT_Rad2}
+McLeod.Li.test(y = v_First_Flowering_Day_Radiation_TS, main = "McLeod-Li Test Statistics for Radiation.")
+```
+
+Fig 2.8: McLeod-Li Test Statistics for Radiation.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1992.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+### Relative Humidity
+
+```{r plotTS_Rel2}
+plot(v_First_Flowering_Day_RelHumidity_TS, type = "b", xlab = "years", ylab = "Relative Humidity", main = "Time series plot for yearly Relative Humidity from 1984 – 2014 (31 years)", pch = 1)
+legend("bottomright", inset = .03, title = "Relative Humidity", legend = "Relative Humidity series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.9: Relative Humidity - Time series plot.
+
+```{r MT_Rel2}
+McLeod.Li.test(y = v_First_Flowering_Day_RelHumidity_TS, main = "McLeod-Li Test Statistics for Relative Humidity")
+```
+
+Fig 2.10: McLeod-Li Test Statistics for Relative Humidity.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1989.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+## Checking for Stationary in the series
+
+Checking for Stationary on First Flowering Day series.
+
+```{r FFD_Stationary2}
+Stationary_Check(v_First_Flowering_Day_data_TS, "First Flowering Day - ACF plot", "First Flowering Day - PACF plot")
+```
+
+Fig 2.11: First Flowering Day - ACF
+Fig 2.12: First Flowering Day - ACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the First Flowering Day series is Stationary.
+
+Checking for Stationary on Temperature data.
+
+```{r Temp_Stationary2}
+Stationary_Check(v_First_Flowering_Day_Temp_TS, "Temperature - ACF plot", "Temperature - PACF plot")
+```
+
+Fig 2.13: Temperature - ACF
+Fig 2.14: Temperature - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.9002 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, Null hypothesis cannot be rejected i.e., The data is not stationary.
+
+Therefore, the Temperature series is not Stationary.
+
+Checking for Stationary on Radiation data.
+
+```{r temp_Stationary2}
+Stationary_Check(v_First_Flowering_Day_Radiation_TS, "Radiation - ACF plot", "Radiation - PACF plot")
+```
+
+Fig 2.15: Radiation - ACF
+Fig 2.16: Radiation - PACF
+
+The is only one significant lag in  the ACF and PACF plot.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.2911 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, Null hypothesis cannot be rejected i.e., The data is not stationary.
+
+Therefore, the Radiation series is not Stationary.
+
+Checking for Stationary on Rainfall data.
+
+```{r Rainfall_Stationary2}
+Stationary_Check(v_First_Flowering_Day_Rainfall_TS, "Rainfall - ACF plot", "Rainfall - PACF plot")
+```
+
+Fig 2.17: Rainfall - ACF
+Fig 2.18: Rainfall - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Rainfall series is Stationary.
+
+Checking for Stationary on Relative Humidity data.
+
+```{r rel_Stationary2}
+Stationary_Check(v_First_Flowering_Day_RelHumidity_TS, "Relative Humidity - ACF plot", "Relative Humidity - PACF plot")
+```
+
+Fig 2.19: Relative Humidity - ACF
+Fig 2.20: Relative Humidity - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Relative Humidity series is Stationary.
+
+
+## Suitable Distributed lag models (Univariate analysis).
+
+Before this let us find the correlation between the two series.
+
+```{r cor2}
+# Calculating the correlation coefficient.
+cor(v_First_Flowering_Day_data_TS, v_First_Flowering_Day_Temp_TS)
+cor(v_First_Flowering_Day_data_TS, v_First_Flowering_Day_Rainfall_TS)
+cor(v_First_Flowering_Day_data_TS, v_First_Flowering_Day_Radiation_TS)
+cor(v_First_Flowering_Day_data_TS, v_First_Flowering_Day_RelHumidity_TS)
+```
+
+
+This suggests that FFD has a better correlation with Rainfall and Radiation.
+
+
+As we are going to forecast the FFD data, our dependent variable "y" will be Mortality Rate series object and independent variable "x" will be Rainfall and Radiation.
+
+As we need to check with and without intercept, let us convert the entire data set into time series.
+
+
+```{r cor2}
+v_data_TS_22 <- ts(v_First_Flowering_Day_data, start = 1984, frequency = 1)
+
+cor(v_data_TS_22)
+```
+
+```{r}
+colnames(v_data_TS_22) <- c("x1", "x2", "x3", "x4", "x5", "y")
+```
+
+### Finite distributed lag model with Rainfall
+
+#### With slope.
+
+```{r Dlag2}
+
+for ( i in 1:10){
+  model_1 = dlm(formula=y ~ x3, data=data.frame(v_data_TS_22), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_2}
+# Finite lag length based on AIC, BIC and MASE
+
+finite_dlm_FFD_slope = dlm(formula = y ~ x3, data=data.frame(v_data_TS_22), q = 10)
+summary(finite_dlm_FFD_slope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model with slope
+  HA : The data fits the Finite distributed lag model with slope.
+
+Interpretations:
+  F - statistic is 1.634   
+  R - squared is 0.6663
+  Adjusted R - squared is 0.2585 
+  Degrees of freedom - DF are (11, 9)
+  p - value (0.2351) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Finite distributed lag model with slope.
+
+No residual analysis is required.
+
+Therefore, Further analysis is needed by removing slope to the lag model.
+
+#### With out slope.
+
+```{r Dlag22}
+for ( i in 1:10){
+  model_2 = dlm(formula=y ~ 0 + x3, data=data.frame(v_data_TS_22), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model), "MASE =", MASE(model_2)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_FFD_no}
+# Finite lag length based on AIC, BIC and MASE
+
+finite_dlm_FFD_noslope = dlm(formula=y ~ 0 + x3, data=data.frame(v_data_TS_22), q = 10)
+summary(finite_dlm_FFD_noslope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model without slope.
+  HA : The data fits the Finite distributed lag model without slope.
+
+Interpretations:
+  F - statistic is 97.01 
+  R - squared is 0.9907
+  Adjusted R - squared is 0.9805
+  Degrees of freedom - DF are (11, 10)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Finite distributed lag model without slope.
+
+This model suggests that there is only 98.05% of data variance. Suggesting that the model explains only 98.05% of the trend. Which implies that the model shows some trend.
+
+Now let us perform residual analysis.
+
+```{r dlm_res22}
+res_analysis(residuals(finite_dlm_FFD_noslope$model))
+```
+
+Residual Analysis for Finite DLM:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen in the data. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. QQplot also suggests that there is no normality in the trend.
+  4. There is only one significant lagin Autocorrelation plot.
+  5. p - value (0.0899) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Even though the model fits better it is poor when it comes to residual analysis. Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+```{r}
+y = v_First_Flowering_Day_data_TS # Independent variable
+x1 = v_First_Flowering_Day_Rainfall_TS # Dependent variable
+x2 = v_First_Flowering_Day_Radiation_TS # Dependent variable
+```
+
+### Polynomial distributed lag model with Rainfall
+
+```{r}
+for (i in 1:3){
+  model_3 <-  polyDlm(x = as.vector(x1), y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_3$model), "BIC = ", BIC(model_3$model), MASE(model_3)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_FFD}
+# Ploynomial DLM
+
+PolyDLM_model_FFD = polyDlm(x = as.vector(x1), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model_FFD)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 0.5904 
+  R - squared is 0.09312
+  Adjusted R - squared is -0.0646
+  Degrees of freedom - DF are (4, 23)
+  p - value (0.673) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Polynomial distributed lag model.
+
+Also, this model suggests that there is only -67.3% of data variance. 
+
+No residual analysis is required.
+
+Let us fit Koyck model.
+
+### Koyck model with Rainfall
+
+```{r koyck_FFD2}
+# Koyk DLM
+
+Koyck_DLM_FFD = koyckDlm(x = as.vector(x1) , y = as.vector(y))
+summary(Koyck_DLM_FFD)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 0.07773  
+  R - squared is -0.2505
+  Adjusted R - squared is -0.3431 
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.9254) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Koyck distributed lag model.
+
+Also, this model suggests that there is only -34.31% of data variance. 
+
+No residual analysis is required.
+
+Let us fit ardlDlm model to check whether it fits better or not.
+
+### Autoregressive distributed lag model with Rainfall
+
+### with slope
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(formula=y ~ x3, data=data.frame(v_data_TS_22), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 4) has the least AIC, BIC and MASE scores. 
+
+```{r ardlm_FFD_54}
+# ARDLM model
+AR_DLM_FFD_54_slope = ardlDlm(formula = y ~ x3, data=data.frame(v_data_TS_22), p = 5 , q = 4)
+summary(AR_DLM_FFD_54_slope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model with slope.
+  HA : The data fits the Autoregressive distributed lag model with slope.
+
+Interpretations:
+  F - statistic is 1.15  
+  R - squared is 0.4339
+  Adjusted R - squared is 0.05646  
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.3911) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Autoregressive distributed lag model with slope.
+
+Also, this model suggests that there is only 5% of data variance. 
+
+No residual analysis is required.
+
+#### With out slope.
+
+```{r Dlag}
+for (i in 1:5){
+  for(j in 1:5){
+    model_5 = ardlDlm(formula=y ~ 0 + x3, data=data.frame(v_data_TS_22), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_5$model), "BIC = ", BIC(model_5$model), "MASE =", MASE(model_5)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 4) has the least AIC, BIC and MASE scores. 
+
+```{r AR_DLM_solar_54_noslope}
+# Finite lag length based on AIC-BIC
+
+AR_DLM_FFD_54_noslope = ardlDlm(formula=y ~ 0 + x3, data=data.frame(v_data_TS_22), p = 5 , q = 4)
+summary(AR_DLM_FFD_54_noslope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model without slope.
+  HA : The data fits the Finite distributed lag model without slope.
+
+Interpretations:
+  F - statistic is 1.15    
+  R - squared is 0.4339
+  Adjusted R - squared is 0.05646   
+  Degrees of freedom - DF are (10, 15)
+  p - value (0.3911) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Autoregressive distributed lag model without slope.
+
+Also, this model suggests that there is only 5.64% of data variance. 
+
+No residual analysis is required.
+
+Therefore let us fit models with Radiation.
+
+### Finite distributed lag model with Radiation
+
+#### With slope.
+
+```{r Dlag2_rad}
+
+for ( i in 1:10){
+  model_1 = dlm(formula=y ~ x4, data=data.frame(v_data_TS_22), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_2_rad}
+# Finite lag length based on AIC, BIC and MASE
+
+finite_dlm_FFD_slope_rad = dlm(formula = y ~ x4, data=data.frame(v_data_TS_22), q = 10)
+summary(finite_dlm_FFD_slope_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model with slope
+  HA : The data fits the Finite distributed lag model with slope.
+
+Interpretations:
+  F - statistic is 0.9731  
+  R - squared is 0.5432
+  Adjusted R - squared is -0.01504 
+  Degrees of freedom - DF are (11, 9)
+  p - value (0.5253) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model doesn't fits the Finite distributed lag model with slope.
+
+Therefore, no residual analysis is required.
+
+Therefore, Further analysis is needed by removing slope to the lag model.
+
+#### With out slope.
+
+```{r Dlag22_rad}
+for ( i in 1:10){
+  model_2 = dlm(formula=y ~ 0 + x4, data=data.frame(v_data_TS_22), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model), "MASE =", MASE(model_2)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_FFD_no_rad}
+# Finite lag length based on AIC, BIC and MASE
+
+finite_dlm_FFD_noslope_rad = dlm(formula = y ~ 0 + x4, data=data.frame(v_data_TS_22), q = 10)
+summary(finite_dlm_FFD_noslope_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model without slope.
+  HA : The data fits the Finite distributed lag model without slope.
+
+Interpretations:
+  F - statistic is 137.1  
+  R - squared is 0.9934
+  Adjusted R - squared is 0.9862
+  Degrees of freedom - DF are (11, 10)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Finite distributed lag model without slope.
+
+This model suggests that there is only 98.62% of data variance. Suggesting that the model explains only 98.62% of the trend. Which implies that the model fits better.
+
+Now let us perform residual analysis.
+
+```{r dlm_res22_rad}
+res_analysis(residuals(finite_dlm_FFD_noslope_rad$model))
+```
+
+Residual Analysis for Finite DLM:
+
+  1. The data points are above the line at the start and below the line at the end of the trend. Randomness is seen in the data. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. QQplot also suggests that there is no normality in the trend.
+  4. There is only one significant lagin Autocorrelation plot.
+  5. p - value (0.08) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Even though the model fits better it is poor when it comes to residual analysis. Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+### Polynomial distributed lag model with Radiation
+
+```{r}
+for (i in 1:3){
+  model_3 <-  polyDlm(x = as.vector(x2), y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_3$model), "BIC = ", BIC(model_3$model), MASE(model_3)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_FFD_rad}
+# Ploynomial DLM
+
+PolyDLM_model_FFD_rad = polyDlm(x = as.vector(x2), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model_FFD_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 0.7093  
+  R - squared is 0.1098
+  Adjusted R - squared is -0.045 
+  Degrees of freedom - DF are (4, 23)
+  p - value (0.5939) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Polynomial distributed lag model.
+
+Also, this model suggests that there is only -4.5% of data variance. 
+
+No residual analysis is required.
+
+Let us fit Koyck model.
+
+### Koyck model with Radiation
+
+```{r koyck_FFD2_rad}
+# Koyk DLM
+
+Koyck_DLM_FFD_rad = koyckDlm(x = as.vector(x2) , y = as.vector(y))
+summary(Koyck_DLM_FFD_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 0.1486  
+  R - squared is -0.07436
+  Adjusted R - squared is -0.1539 
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.8626) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Koyck distributed lag model.
+
+Also, this model suggests that there is only -15.39% of data variance. 
+
+No residual analysis is required.
+
+Let us fit ardlDlm model to check whether it fits better or not.
+
+### Autoregressive distributed lag model with Radiation
+
+### with slope
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(formula=y ~ x4, data=data.frame(v_data_TS_22), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 4) has the least AIC, BIC and MASE scores. 
+
+```{r ardlm_FFD_54_rad}
+# ARDLM model
+AR_DLM_FFD_54_slope_rad = ardlDlm(formula = y ~ x4, data=data.frame(v_data_TS_22), p = 5 , q = 4)
+summary(AR_DLM_FFD_54_slope_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model with slope.
+  HA : The data fits the Autoregressive distributed lag model with slope.
+
+Interpretations:
+  F - statistic is 0.5004   
+  R - squared is 0.2501
+  Adjusted R - squared is -0.2498  
+  Degrees of freedom - DF are (10, 15)
+  p - value (0.8644) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Autoregressive distributed lag model with slope.
+
+Also, this model suggests that there is only -24.98% of data variance. 
+
+No residual analysis is required.
+
+#### With out slope.
+
+```{r Dlag_rad}
+for (i in 1:5){
+  for(j in 1:5){
+    model_5 = ardlDlm(formula=y ~ 0 + x4, data=data.frame(v_data_TS_22), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_5$model), "BIC = ", BIC(model_5$model), "MASE =", MASE(model_5)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 4) has the least AIC, BIC and MASE scores. 
+
+```{r AR_DLM_solar_54_noslope_rad}
+# Finite lag length based on AIC-BIC
+
+AR_DLM_FFD_54_noslope_rad = ardlDlm(formula=y ~ 0 + x4, data=data.frame(v_data_TS_22), p = 5 , q = 4)
+summary(AR_DLM_FFD_54_noslope_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model without slope.
+  HA : The data fits the Finite distributed lag model without slope.
+
+Interpretations:
+  F - statistic is 0.5004   
+  R - squared is 0.2501
+  Adjusted R - squared is -0.2498  
+  Degrees of freedom - DF are (10, 15)
+  p - value (0.8644) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Autoregressive distributed lag model with slope.
+
+Also, this model suggests that there is only -24.98% of data variance. 
+
+No residual analysis is required.
+
+Therefore, Finite DLM without slope w.r.t radiation fits better.
+
+Now let us fit dynamic lm model
+
+## Dynamic model 
+
+### Rainfall
+
+#### With slope
+
+```{r}
+v_FFd_dyna_rain <- dynlm(y ~ x3, data = data.frame(v_data_TS_22))
+summary(v_FFd_dyna_rain)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model with slope.
+  HA : The data fits the Dynamic linear model with slope.
+
+Interpretations:
+  F - statistic is 0.07471  
+  R - squared is 0.00257
+  Adjusted R - squared is -0.03182  
+  Degrees of freedom - DF are (1, 29)
+  p - value (0.7865) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model doesn't fit the Dynamic linear model with slope.
+
+This model suggests that there is only -3.18% of data variance.
+
+No residual analysis is required.
+
+Therefore, Further analysis is needed by removing slope to the lag model.
+
+#### With out slope.
+
+```{r}
+v_FFd_dyna_rain_noslope <- dynlm(y ~ 0 + x3, data = data.frame(v_data_TS_22))
+summary(v_FFd_dyna_rain_noslope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model without slope.
+  HA : The data fits the Dynamic linear model without slope.
+
+Interpretations:
+  F - statistic is 866.6  
+  R - squared is 0.9665
+  Adjusted R - squared is 0.9654  
+  Degrees of freedom - DF are (1, 30)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Dynamic linear model.
+
+This model suggests that there is only 96.54% of data variance. Suggesting that the model explains only 96,54% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r v_mort_dyna_resnoslope}
+res_analysis(residuals(v_FFd_dyna_rain_noslope))
+```
+
+Residual Analysis for v_FFd_dyna_rain_noslope:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.4113) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Even though the model fits better it is poor when it comes to residual analysis. Let us fit with Radiation. 
+
+### Radiation
+
+#### With slope
+
+```{r}
+v_FFd_dyna_rad <- dynlm(y ~ x4, data = data.frame(v_data_TS_22))
+summary(v_FFd_dyna_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model with slope.
+  HA : The data fits the Dynamic linear model with slope.
+
+Interpretations:
+  F - statistic is 0.0636   
+  R - squared is 0.002188
+  Adjusted R - squared is -0.03222  
+  Degrees of freedom - DF are (1, 29)
+  p - value (0.8027) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model doesn't fit the Dynamic linear model with slope.
+
+This model suggests that there is only -3.22% of data variance.
+
+No residual analysis is required.
+
+Therefore, Further analysis is needed by removing slope to the lag model.
+
+#### With out slope.
+
+```{r}
+v_FFd_dyna_rad_noslope <- dynlm(y ~ 0 + x4, data = data.frame(v_data_TS_22))
+summary(v_FFd_dyna_rad_noslope)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model without slope.
+  HA : The data fits the Dynamic linear model without slope.
+
+Interpretations:
+  F - statistic is 2388  
+  R - squared is 0.9876
+  Adjusted R - squared is 0.9872   
+  Degrees of freedom - DF are (1, 30)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Dynamic linear model without slope.
+
+This model suggests that there is only 98.72% of data variance. Suggesting that the model explains only 98.72% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+#### Residual analysis
+
+```{r v_mort_dyna_resnoslope}
+res_analysis(residuals(v_FFd_dyna_rad_noslope))
+```
+
+Residual Analysis for v_FFd_dyna_rad_noslope:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.6705) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Therefore, Dynamic model without slope w.r.t radiation fits better.
+
+## Exponential Smoothing
+
+Since the Seasonality component is week we cannot get additive and multiplicative seasonality. So let us fit with simple seasonality. Since, we need next 3 years point forecasts as well as confidence intervals, we used h = 3 (frequency).
+
+```{r}
+fit_ses <- ses(v_First_Flowering_Day_data_TS, seasonal = "simple", h = 4)
+summary(fit_ses)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(fit_ses))
+```
+
+Residual Analysis analysis for simple seasonality:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+Now let us fit with simple seasonality with both alpha and gamma.
+
+```{r}
+fit2 <- holt(v_First_Flowering_Day_data_TS, initial = "simple", h = 4)
+
+#both alpha and beta
+summary(fit2)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(fit2))
+```
+
+Residual Analysis analysis for simple seasonality:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit with exponential trend.
+
+```{r}
+fit3 <- holt(v_First_Flowering_Day_data_TS, initial="simple", exponential = TRUE, h = 4)# Fit with exponential trend
+summary(fit3)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(fit3))
+```
+
+Residual Analysis analysis for exponential trend:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+```{r}
+fit4 <- holt(v_First_Flowering_Day_data_TS, initial="simple", damped = TRUE, h = 4)# Fit with damped trend
+summary(fit3)
+```
+
+Now let us check the residual analysis.
+
+```{r}
+res_analysis(residuals(fit4))
+```
+
+Residual Analysis analysis for exponential trend:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+Due to week seasonality in the series there is no additive or multiplicative seasonality also there will be no damped in the series.
+
+By exponential smoothing method we got the simple seasonal fit as the best model in terms of MASE and BIC scores. 
+
+
+## State Space Model Variations
+
+Let us find the best ets model. Before all let us auto fit the model.
+
+Since, we need next 3 years point forecasts as well as confidence intervals, we used h = 4 (frequency).
+
+```{r}
+v_ets_fit <- ets(v_First_Flowering_Day_data_TS, h = 4)
+summary(v_ets_fit)
+```
+
+ETS(M, N, N)
+
+M - Multiplicative errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit)
+```
+
+Residual Analysis ETS(A, AD, A):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit ets variable combinations individually.
+
+```{r}
+v_ets_fit1 <- ets(v_First_Flowering_Day_data_TS, model = "ANN")
+summary(v_ets_fit1)
+```
+
+ETS(A, N, N)
+
+A - Additive errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit1)
+```
+
+Residual Analysis ETS(A, N, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+```{r}
+v_ets_fit2 <- ets(v_First_Flowering_Day_data_TS, model = "AAN")
+summary(v_ets_fit2)
+```
+
+ETS(A, A, N)
+
+A - Additive errors
+
+A - Additive trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit2)
+```
+
+Residual Analysis ETS(A, A, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+```{r}
+v_ets_fit3 <- ets(v_First_Flowering_Day_data_TS, model = "MNN")
+summary(v_ets_fit3)
+```
+
+ETS(A, A, N)
+
+M - Multiplicative errors
+
+N - No trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit3)
+```
+
+Residual Analysis ETS(M, N, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+```{r}
+v_ets_fit4 <- ets(v_First_Flowering_Day_data_TS, model = "MAN")
+summary(v_ets_fit4)
+```
+
+ETS(A, A, N)
+
+M - Multiplicative errors
+
+A - Additive trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit4)
+```
+
+Residual Analysis ETS(M, A, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+```{r}
+v_ets_fit5 <- ets(v_First_Flowering_Day_data_TS, model = "MMN")
+summary(v_ets_fit5)
+```
+
+ETS(M, M, N)
+
+M - Multiplicative errors
+
+M - Multiplicative trend
+
+N - No seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+checkresiduals(v_ets_fit5)
+```
+
+Residual Analysis ETS(M, M, N):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+  
+Comparitively, based on MASE and RMSE score ets(M, N, N) is better.
+
+Among all the methods, holt in exponential smoothing with damped trend.
+
+
+```{r cov2}
+data.x <- read.csv("Cov.csv", header = TRUE)
+head(data.x)
+```
+
+
+## Forecasting
+
+Let us forecast for the next 4 years on First Flowering Day series. From 2015 to 2018. For the optimal model from each method.
+
+```{r Fore2}
+fit <- holt(v_First_Flowering_Day_data_TS, initial = "simple", damped = TRUE, h = 4)
+
+v_FFD_forecasts <- ts.intersect(ts(fit$lower[, 2], start = c(2015), frequency = 1), ts(fit$mean, start = c(2015), frequency = 1), ts(fit$upper[, 2], start = c(2015), frequency = 1))
+colnames(v_FFD_forecasts) <- c("Lower bound", "Point forecast", "Upper bound")
+
+v_FFD_forecasts
+```
+
+Now let us plot the forecast.
+
+```{r Fore12}
+plot(fit, fcol = "white", main = "Forecast of First Flowering Day series for the next 3 years (2015, 2017)", ylab = "First Flowering Day")
+lines(fitted(fit), col = "red")
+lines(fit$mean, col = "blue", lwd = 2)
+legend("bottom", inset = .03, cex = 0.9, box.lty = 2, box.lwd = 2, pch = 1, lty = 1, col = c("red", "blue"), c("Data", "Forecasts"))
+```
+
+Fig 2.21: Next 2 year forecast on the First Flowering Day Series.
+
+From the two year forecast results we can predict that there will be decrease in the First Flowering Day in the future. This suggests that the impact of the chemical components decreases in future.
+
+
+# Task 3
+
+## Part (a)
+
+### Data
+
+The data here used is the the contemporaneous yearly averaged climate variables measured from 1984 – 2014 (31 years).
+
+```{r DataLoading3}
+v_RBO_data <- read.csv("RBO.csv", header = TRUE)
+head(v_RBO_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_RBO_data)
+```
+
+Checking for Missing values.
+
+```{r scan 3}
+colSums(is.na(v_RBO_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_solar_data. (It should be a data frame.)
+
+```{r class3}
+class(v_RBO_data)
+```
+
+```{r TS3}
+v_RBO_Temp_TS <- ts(v_RBO_data$Temperature, start = c(1984), frequency = 1)
+v_RBO_Rainfall_TS <- ts(v_RBO_data$Rainfall, start = c(1984), frequency = 1)
+v_RBO_Radiation_TS <- ts(v_RBO_data$Radiation, start = c(1984), frequency = 1)
+v_RBO_RelHumidity_TS <- ts(v_RBO_data$RelHumidity, start = c(1984), frequency = 1)
+v_RBO_data_TS <- ts(v_RBO_data$RBO, start = c(1984), frequency = 1)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class3}
+class(v_RBO_Temp_TS)
+class(v_RBO_Rainfall_TS)
+class(v_RBO_Radiation_TS)
+class(v_RBO_RelHumidity_TS)
+class(v_RBO_data_TS)
+```
+
+Now let us perform descriptive analysis on each time series object.
+
+## Descriptive Analysis
+
+### Rank-based Order similarity metric
+
+```{r plotTS_RBO3}
+plot(v_RBO_data_TS, type = "b", xlab = "years", ylab = "Rank-based Order similarity metric", main = "Time series plot for yearly Rank-based Order similarity metric from 1984 – 2014 (31 years)", pch = 1)
+legend("topright", inset = .03, title = "Rank-based Order similarity metric", legend = "Rank-based Order similarity metric series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 3.1: Rank-based Order similarity metric - Time series plot.
+
+```{r MT_RBO3}
+McLeod.Li.test(y = v_RBO_data_TS, main = "McLeod-Li Test Statistics for Rank-based Order similarity metric.")
+```
+
+Fig 3.2: McLeod-Li Test Statistics for Rank-based Order similarity metric.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around multiple years.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Temperature
+
+```{r plotTS_temp3}
+plot(v_RBO_Temp_TS, type = "b", xlab = "years", ylab = "Temperature", main = "Time series plot for yearly temperature from 1984 – 2014 (31 years)", pch = 1)
+legend("top", inset = .03, title = "Temperature", legend = "Temperature series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 3.3: Temperature - Time series plot.
+
+```{r MT_temp3}
+McLeod.Li.test(y = v_RBO_Rainfall_TS, main = "McLeod-Li Test Statistics for Temperature")
+```
+
+Fig 3.4: McLeod-Li Test Statistics for Temperature
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1996.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Rainfall
+
+```{r plotTS_Rain3}
+plot(v_RBO_Rainfall_TS, type = "b", xlab = "years", ylab = "Rainfall", main = "Time series plot for yearly Rainfall from 1984 – 2014 (31 years)", pch = 1)
+legend("bottomleft", inset = .03, title = "Rainfall", legend = "Rainfall series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 3.5: Rainfall - Time series plot.
+
+```{r MT_Rain3}
+McLeod.Li.test(y = v_RBO_Rainfall_TS, main = "McLeod-Li Test Statistics for Rainfall")
+```
+
+Fig 3.6: McLeod-Li Test Statistics for Rainfall
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1996.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Radiation
+
+```{r plotTS_Rad3}
+plot(v_RBO_Radiation_TS, type = "b", xlab = "years", ylab = "Radiation", main = "Time series plot for yearly Radiation from 1984 – 2014 (31 years)", pch = 1)
+legend("topleft", inset = .03, title = "Radiation", legend = "Radiation series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 3.7: Radiation - Time series plot.
+
+```{r MT_Rad3}
+McLeod.Li.test(y = v_RBO_Rainfall_TS, main = "McLeod-Li Test Statistics for Radiation")
+```
+
+Fig 3.8: McLeod-Li Test Statistics for Radiation
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1992.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+### Relative Humidity
+
+```{r plotTS_Rel3}
+plot(v_RBO_RelHumidity_TS, type = "b", xlab = "years", ylab = "Relative Humidity", main = "Time series plot for yearly Relative Humidity from 1984 – 2014 (31 years)", pch = 1)
+legend("bottomright", inset = .03, title = "Relative Humidity", legend = "Relative Humidity series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 3.9: Relative Humidity - Time series plot.
+
+```{r MT_Rel3}
+McLeod.Li.test(y = v_RBO_RelHumidity_TS, main = "McLeod-Li Test Statistics for Relative Humidity")
+```
+
+Fig 3.10: McLeod-Li Test Statistics for Relative Humidity.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1989.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+### Checking for Stationary in the series
+
+Checking for Stationary on Rank-based Order similarity metric series.
+
+```{r RBO_Stationary3}
+Stationary_Check(v_RBO_data_TS, "Rank-based Order similarity metric - ACF plot", "Rank-based Order similarity metric - PACF plot")
+```
+
+Fig 3.11: Rank-based Order similarity metric - ACF
+Fig 3.12: Rank-based Order similarity metric - ACF
+
+The are significant lags in  the ACF and PACF plot suggesting the stochastic component is not white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.7829 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, Null hypothesis cannot be rejected i.e., The data is not stationary.
+
+Therefore, the Rank - based Order similarity metric series is not Stationary.
+
+Checking for Stationary on Temperature data.
+
+```{r Temp_Stationary3}
+Stationary_Check(v_RBO_Temp_TS, "Temperature - ACF plot", "Temperature - PACF plot")
+```
+
+Fig 3.13: Temperature - ACF
+Fig 3.14: Temperature - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.9002 > 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Temperature series is Stationary.
+
+Checking for Stationary on Radiation data.
+
+```{r temp_Stationary3}
+Stationary_Check(v_RBO_Radiation_TS, "Radiation - ACF plot", "Radiation - PACF plot")
+```
+
+Fig 3.15: Radiation - ACF
+Fig 3.16: Radiation - PACF
+
+The is only one significant lag in  the ACF and PACF plot.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.2911 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, Null hypothesis cannot be rejected i.e., The data is not stationary.
+
+Therefore, the Radiation series is not Stationary.
+
+Checking for Stationary on Rainfall data.
+
+```{r Rainfall_Stationary3}
+Stationary_Check(v_RBO_Rainfall_TS, "Rainfall - ACF plot", "Rainfall - PACF plot")
+```
+
+Fig 3.17: Rainfall - ACF
+Fig 3.18: Rainfall - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Rainfall series is Stationary.
+
+Checking for Stationary on Relative Humidity data.
+
+```{r rel_Stationary3}
+Stationary_Check(v_RBO_RelHumidity_TS, "Relative Humidity - ACF plot", "Relative Humidity - PACF plot")
+```
+
+Fig 3.19: Relative Humidity - ACF
+Fig 3.20: Relative Humidity - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Relative Humidity series is Stationary.
+
+### Suitable distributed lag model.
+
+Before this let us find the correlation between the series.
+
+```{r cor3}
+# Calculating the correlation coefficient
+cor(v_RBO_data_TS, v_RBO_Temp_TS)
+cor(v_RBO_data_TS, v_RBO_Rainfall_TS)
+cor(v_RBO_data_TS, v_RBO_Radiation_TS)
+cor(v_RBO_data_TS, v_RBO_RelHumidity_TS)
+```
+
+This suggests that FFD has a better correlation with Rainfall and Radiation.
+
+
+As we are going to forecast the FFD data, our dependent variable "y" will be Mortality Rate series object and independent variable "x" will be Rainfall and Temperature.
+
+#### Finite distributed lag model Rainfall
+
+```{r Dlag3}
+x1 = v_RBO_Rainfall_TS # Independent variable
+x2 = v_RBO_Temp_TS # Independent variable
+y = v_RBO_data_TS # Dependent variable
+
+
+for ( i in 1:10){
+  model_1 = dlm(x = as.vector(x1) , y = as.vector(y), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_rain3}
+# Finite lag length based on AIC-BIC-MASE
+
+finite_dlm_rain = dlm( x = as.vector(x1) , y = as.vector(y), q = 10)
+summary(finite_dlm_rain)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model.
+  HA : The data fits the Finite distributed lag model.
+
+Interpretations:
+  F - statistic is 0.3959    
+  R - squared is 0.3261
+  Adjusted R - squared is -0.4975 
+  Degrees of freedom - DF are (11, 9)
+  p - value (0.9251) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Finite distributed lag model with slope.
+
+No residual analysis is required.
+
+Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+### Polynomial distributed lag model with Rainfall
+
+```{r}
+for (i in 1:3){
+  model_3 <-  polyDlm(x = as.vector(x1), y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_3$model), "BIC = ", BIC(model_3$model), "MASE = ", MASE(model_3)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_RBO3}
+# Ploynomial DLM
+
+PolyDLM_model_Rain = polyDlm(x = as.vector(x1), y = as.vector(y), q = 1, k = 1, show.beta = TRUE)
+summary(PolyDLM_model_Rain)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 3.711  
+  R - squared is 0.2156
+  Adjusted R - squared is 0.1575
+  Degrees of freedom - DF are (4, 500)
+  p - value (0.03767) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 15.75% of data variance. Suggesting that the model explains only 15.75% of the trend. Which implies that the model shows some trend.
+
+
+#### Residual analysis
+
+```{r polydlm_res3}
+res_analysis(residuals(PolyDLM_model_Rain$model))
+```
+
+Residual Analysis for Polynomial DLM with part:
+
+  1. The data points are both below the line at the start and at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (0.2621) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Now let us fit Koyck model.
+
+### Koyck model with Rainfall
+
+```{r koyck_RBO3}
+# Koyk DLM
+
+Koyck_DLM_Rain = koyckDlm(x = as.vector(x1) , y = as.vector(y))
+summary(Koyck_DLM_Rain)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 0.01549  
+  R - squared is -286.5
+  Adjusted R - squared is -307.8 
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.9846) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Koyck distributed lag model.
+
+No residual analysis is required.
+
+Let us fit ardlDlm model to check whether it fits better or not.
+
+### Autoregressive distributed lag model Rainfall
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(x = as.vector(x1) , y = as.vector(y), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 3) has the least AIC, BIC and MASE scores. 
+
+```{r ardlm_RBO_53}
+# ARDLM model
+AR_DLM_Rain_53 = ardlDlm(x = as.vector(x1) , y = as.vector(y), p = 5, q = 3)
+summary(AR_DLM_Rain_53)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 2.58  
+  R - squared is 0.592
+  Adjusted R - squared is 0.3625 
+  Degrees of freedom - DF are (9, 16)
+  p - value (0.04715) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 36.25% of data variance. Suggesting that the model explains only 33.25% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r AR_DLM_Rain_53}
+res_analysis(residuals(AR_DLM_Rain_53))
+```
+
+Residual Analysis for AR_DLM_Rain_53:
+
+  1. The data points are both below the line at the start and at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (0.1086) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  
+Now let us fit with Temperature variable.
+
+### Temperature
+
+#### Finite distributed lag model
+
+```{r Dlag3_temp3}
+
+for ( i in 1:10){
+  model_1 = dlm(x = as.vector(x2) , y = as.vector(y), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+  }
+```
+
+As we have the least AIC, BIC and MASE values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_temp3}
+# Finite lag length based on AIC-BIC-MASE
+
+finite_dlm_temp = dlm( x = as.vector(x2) , y = as.vector(y), q = 10)
+summary(finite_dlm_temp)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model.
+  HA : The data fits the Finite distributed lag model.
+
+Interpretations:
+  F - statistic is 1.232     
+  R - squared is 0.6008
+  Adjusted R - squared is 0.1129  
+  Degrees of freedom - DF are (11, 9)
+  p - value (0.3834) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Finite distributed lag model.
+
+No residual analysis is required.
+
+Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+### Polynomial distributed lag model
+
+```{r}
+for (i in 1:3){
+  model_3 <-  polyDlm(x = as.vector(x2), y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_3$model), "BIC = ", BIC(model_3$model), "MASE = ", MASE(model_3)$MASE, "\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_RBO3_temp}
+# Ploynomial DLM
+
+PolyDLM_model_temp = polyDlm(x = as.vector(x2), y = as.vector(y), q = 1, k = 1, show.beta = TRUE)
+summary(PolyDLM_model_temp)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 4.273   
+  R - squared is 0.2404
+  Adjusted R - squared is 0.1842 
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.02442) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 18.42% of data variance. Suggesting that the model explains only 18.42% of the trend. Which implies that the model shows some trend.
+
+
+#### Residual analysis
+
+```{r polydlm_res3_temp}
+res_analysis(residuals(PolyDLM_model_temp$model))
+```
+
+Residual Analysis for Polynomial DLM with part:
+
+  1. The data points are both below the line at the start and at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (0.5558) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Now let us fit Koyck model.
+
+### Koyck model
+
+```{r koyck_RBO3_temp}
+# Koyk DLM
+
+Koyck_DLM_temp = koyckDlm(x = as.vector(x2) , y = as.vector(y))
+summary(Koyck_DLM_temp)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 2.119  
+  R - squared is -1.597
+  Adjusted R - squared is  -1.789 
+  Degrees of freedom - DF are (2, 27)
+  p - value (0.1397 ) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the data doesn't fit the Koyck distributed lag model.
+
+No residual analysis is required.
+
+Let us fit ardlDlm model to check whether it fits better or not.
+
+### Autoregressive distributed lag model
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(x = as.vector(x2) , y = as.vector(y), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+
+```
+
+(p, q) = (5, 2) has the least AIC, BIC and MASE scores. 
+
+```{r ardlm_RBO_52_temp}
+# ARDLM model
+AR_DLM_temp_52 = ardlDlm(x = as.vector(x2) , y = as.vector(y), p = 5, q = 2)
+summary(AR_DLM_temp_52)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 3.745  
+  R - squared is 0.638
+  Adjusted R - squared is 0.4676  
+  Degrees of freedom - DF are (9, 16)
+  p - value (0.01057) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 46.76% of data variance. Suggesting that the model explains only 46.76% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r AR_DLM_temp_52}
+res_analysis(residuals(AR_DLM_temp_52))
+```
+
+Residual Analysis for AR_DLM_temp_52:
+
+  1. The data points are both below the line at the start and at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+  5. p - value (0.2922) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+Now let us calculate AIC, BIC and MASE scores and store them in a dataframe to check the better model based on MASE score.
+
+```{r}
+attr(AR_DLM_Rain_53$model, "class") = "lm"
+attr(AR_DLM_temp_52$model, "class") = "lm"
+
+v_model_name <- c("PolyDLM_model_Rain", "AR_DLM_Rain_53", "PolyDLM_model_temp", "AR_DLM_temp_52")
+```
+
+
+```{r warning=FALSE}
+MASE <- MASE(PolyDLM_model_Rain$model, AR_DLM_Rain_53$model, PolyDLM_model_temp$model, AR_DLM_temp_52$model)$MASE
+
+aic <- AIC(PolyDLM_model_Rain$model, AR_DLM_Rain_53$model, PolyDLM_model_temp$model, AR_DLM_temp_52$model)$AIC
+
+bic <- BIC(PolyDLM_model_Rain$model, AR_DLM_Rain_53$model, PolyDLM_model_temp$model, AR_DLM_temp_52$model)$BIC
+```
+
+
+```{r score}
+v_score <- data.frame(v_model_name, MASE, aic, bic)
+colnames(v_score) <- c("MODEL_NAME", "MASE", "AIC", "BIC")
+v_score
+```
+
+Therefore, AR_DLM_Rain_53 is the better model.
+
+Now let us fit dynamic model.
+
+For dlm model we need some modifications in the series.
+
+
+```{r data3}
+v_data_TS_33 <- ts(v_RBO_data, start = 1984, frequency = 1)
+colnames(v_data_TS_33) <- c("x1", "y", "x2", "x3", "x4", "x5")
+```
+
+## Dynamic model with Rainfall
+
+```{r}
+v_rain_dyna <- dynlm(y ~ x3, data = data.frame(v_data_TS_33))
+summary(v_rain_dyna)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 5.304       
+  R - squared is 0.1546
+  Adjusted R - squared is 0.1255   
+  Degrees of freedom - DF are (1, 29)
+  p - value (0.02864) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Dynamic linear model.
+
+This model suggests that there is only 12.55% of data variance. Suggesting that the model explains only 12.55% of the trend. Which implies that the model shows some trend.
+
+
+Now let us check residuals.
+
+### Residual analysis
+
+```{r v_rain_dyna_res}
+res_analysis(residuals(v_rain_dyna))
+```
+
+Residual Analysis for v_rain_dyna:
+
+  1. The data points are above at the start and below at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is not symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (0.7697) from Shapiro-Wilk normality test is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+
+
+## Dynamic model with Temperature
+
+```{r}
+v_temp_dyna <- dynlm(y ~ x2, data = data.frame(v_data_TS_33))
+summary(v_temp_dyna)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 2.12       
+  R - squared is 0.06812
+  Adjusted R - squared is 0.03599  
+  Degrees of freedom - DF are (1, 29)
+  p - value (0.1561) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Dynamic linear model.
+
+No residual analysis is required.
+
+## Forecasting
+
+For forecasting we need the optimal model among each method. We got only 5 fit models with 2 different predictors.
+
+  1. "PolyDLM_model_Rain"
+  2. "AR_DLM_Rain_53"
+  3. "PolyDLM_model_temp"
+  4. "AR_DLM_temp_52"
+  5. "v_rain_dyna"
+
+Among the polynomial models temperature has the least MASE score compared. Whereas, AR_DLM has Rainfall and Dynamic has only one variable fit i.e., with rainfall.
+
+Therefore using these models to predict RBO series.
+
+### Forecating with PolyDLM_model_Rain
+
+Let us forecast for the next 3 years on RBO series. From 2014 to 2016.
+
+```{r Fore3}
+
+v_RBOr_forecasts_POLY <- forecast.ets(PolyDLM_model_Rain, h = 3)
+v_RBOr_forecasts_POLY
+```
+
+Now let us plot the forecast.
+
+```{r Fore13}
+plot(fit, fcol = "white", main = "Forecast of RBO series for the next 3 years (2014, 2017)", ylab = "RBO")
+lines(fitted(fit), col = "red")
+lines(fit$mean, col = "blue", lwd = 2)
+legend("bottom", inset = .03, cex = 0.9, box.lty = 2, box.lwd = 2, pch = 1, lty = 1, col = c("red", "blue"), c("Data", "Forecasts"))
+```
+
+Fig 3.21: Next 3 years forecast on the RBO Series.
+
+From the three year forecast results we can predict that there will be decrease in the Rank-based Order similarity metric in the future.
+
+## Part (b)
+
+
+### Data
+
+The data here used is the the contemporaneous yearly averaged climate variables measured from 1984 – 2014 (31 years), particularly during the Millennium Drought (1997 – 2009) (13 years).
+
+To get this, the data is trimmed as below,
+
+```{r DataLoading4}
+v_RBO_data_task_b <- tail(v_RBO_data, -13)
+v_RBO_data_task_b <- head(v_RBO_data_task_b, -5)
+head(v_RBO_data_task_b)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_RBO_data_task_b)
+```
+
+Checking for Missing values.
+
+```{r scan 4}
+colSums(is.na(v_RBO_data_task_b))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_solar_data. (It should be a data frame.)
+
+```{r class4}
+class(v_RBO_data_task_b)
+```
+
+```{r TS4}
+v_RBO_Temp_task_b_TS <- ts(v_RBO_data_task_b$Temperature, start = c(1997), frequency = 1)
+v_RBO_Rainfall_task_b_TS <- ts(v_RBO_data_task_b$Rainfall, start = c(1997), frequency = 1)
+v_RBO_Radiation_task_b_TS <- ts(v_RBO_data_task_b$Radiation, start = c(1997), frequency = 1)
+v_RBO_RelHumidity_task_b_TS <- ts(v_RBO_data_task_b$RelHumidity, start = c(1997), frequency = 1)
+v_RBO_data_task_b_TS <- ts(v_RBO_data_task_b$RBO, start = c(1997), frequency = 1)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class4}
+class(v_RBO_Temp_task_b_TS)
+class(v_RBO_Rainfall_task_b_TS)
+class(v_RBO_Radiation_task_b_TS)
+class(v_RBO_RelHumidity_task_b_TS)
+class(v_RBO_data_task_b_TS)
+```
+
+Now let us perform descriptive analysis on each time series object.
+
+## Descriptive Analysis
+
+### Rank-based Order similarity metric
+
+```{r plotTS_RBO4}
+plot(v_RBO_data_task_b_TS, type = "b", xlab = "years", ylab = "Rank-based Order similarity metric", main = "Time series plot for yearly Rank-based Order similarity metric during the Millennium Drought (1997 – 2009) (13 years)", pch = 1)
+legend("topleft", inset = .03, title = "Rank-based Order similarity metric", legend = "Rank-based Order similarity metric series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 4.1: Rank-based Order similarity metric - Time series plot.
+
+```{r MT_RBO4}
+McLeod.Li.test(y = v_RBO_data_task_b_TS, main = "McLeod-Li Test Statistics for Rank-based Order similarity metric.")
+```
+
+Fig 4.2: McLeod-Li Test Statistics for Rank-based Order similarity metric.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is some downward trend in the data.
+2.  There is an intervention around multiple years.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Temperature
+
+```{r plotTS_temp4}
+plot(v_RBO_Temp_task_b_TS, type = "b", xlab = "years", ylab = "Temperature", main = "Time series plot for yearly temperature during the Millennium Drought (1997 – 2009) (13 years)", pch = 1)
+legend("top", inset = .03, title = "Temperature", legend = "Temperature series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 4.3: Temperature - Time series plot.
+
+```{r MT_temp4}
+McLeod.Li.test(y = v_RBO_Temp_task_b_TS, main = "McLeod-Li Test Statistics for Temperature")
+```
+
+Fig 4.4: McLeod-Li Test Statistics for Temperature
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention at multiple points.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Rainfall
+
+```{r plotTS_Rain4}
+plot(v_RBO_Rainfall_task_b_TS, type = "b", xlab = "years", ylab = "Rainfall", main = "Time series plot for yearly Rainfall during the Millennium Drought (1997 – 2009) (13 years)", pch = 1)
+legend("bottom", inset = .03, title = "Rainfall", legend = "Rainfall series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 4.5: Rainfall - Time series plot.
+
+```{r MT_Rain4}
+McLeod.Li.test(y = v_RBO_Rainfall_task_b_TS, main = "McLeod-Li Test Statistics for Rainfall")
+```
+
+Fig 4.6: McLeod-Li Test Statistics for Rainfall
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 2004.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+### Radiation
+
+```{r plotTS_Rad4}
+plot(v_RBO_Radiation_task_b_TS, type = "b", xlab = "years", ylab = "Radiation", main = "Time series plot for yearly Radiation during the Millennium Drought (1997 – 2009) (13 years)", pch = 1)
+legend("topleft", inset = .03, title = "Radiation", legend = "Radiation series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 4.7: Radiation - Time series plot.
+
+```{r MT_Rad4}
+McLeod.Li.test(y = v_RBO_Rainfall_task_b_TS, main = "McLeod-Li Test Statistics for Radiation")
+```
+
+Fig 4.8: McLeod-Li Test Statistics for Radiation
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1992.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+### Relative Humidity
+
+```{r plotTS_Rel4}
+plot(v_RBO_RelHumidity_task_b_TS, type = "b", xlab = "years", ylab = "Relative Humidity", main = "Time series plot for yearly Relative Humidity during the Millennium Drought (1997 – 2009) (13 years)", pch = 1)
+legend("topright", inset = .03, title = "Relative Humidity", legend = "Relative Humidity series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 4.9: Relative Humidity - Time series plot.
+
+```{r MT_Rel4}
+McLeod.Li.test(y = v_RBO_RelHumidity_TS, main = "McLeod-Li Test Statistics for Relative Humidity")
+```
+
+Fig 4.10: McLeod-Li Test Statistics for Relative Humidity.
+
+Descriptive analysis
+
+1.	From the series plot, we can observe that there is no trend in the data.
+2.  There is an intervention around the year 1998.
+3.	From the series plot, we can conclude that there is no seasonality in the series.
+4.  There is no consistency across the observed period of time due to higher and lower values.
+5.  The series shows Autoregressive and moving average behaviour.
+6.	Also, we can see change in variance.
+
+
+### Checking for Stationary in the series
+
+Checking for Stationary on Rank-based Order similarity metric series.
+
+```{r RBO_Stationary4}
+Stationary_Check(v_RBO_data_task_b_TS, "Rank-based Order similarity metric - ACF plot", "Rank-based Order similarity metric - PACF plot")
+```
+
+Fig 4.11: Rank-based Order similarity metric - ACF
+Fig 4.12: Rank-based Order similarity metric - ACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Rank - based Order similarity metric series is Stationary.
+
+Checking for Stationary on Temperature data.
+
+```{r Temp_Stationary4}
+Stationary_Check(v_RBO_Temp_task_b_TS, "Temperature - ACF plot", "Temperature - PACF plot")
+```
+
+Fig 4.13: Temperature - ACF
+Fig 4.14: Temperature - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Temperature series is Stationary.
+
+Checking for Stationary on Radiation data.
+
+```{r temp_Stationary4}
+Stationary_Check(v_RBO_Radiation_task_b_TS, "Radiation - ACF plot", "Radiation - PACF plot")
+```
+
+Fig 4.15: Radiation - ACF
+Fig 4.16: Radiation - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.2182 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, Null hypothesis cannot be rejected i.e., The data is not stationary.
+
+Therefore, the Radiation series is not Stationary.
+
+Checking for Stationary on Rainfall data.
+
+```{r Rainfall_Stationary4}
+Stationary_Check(v_RBO_Rainfall_task_b_TS, "Rainfall - ACF plot", "Rainfall - PACF plot")
+```
+
+Fig 4.17: Rainfall - ACF
+Fig 4.18: Rainfall - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.01281 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Rainfall series is Stationary.
+
+Checking for Stationary on Relative Humidity data.
+
+```{r rel_Stationary4}
+Stationary_Check(v_RBO_RelHumidity_TS, "Relative Humidity - ACF plot", "Relative Humidity - PACF plot")
+```
+
+Fig 4.19: Relative Humidity - ACF
+Fig 4.20: Relative Humidity - PACF
+
+The are no significant lags in  the ACF and PACF plot suggesting the stochastic component is white noise.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Relative Humidity series is Stationary.
+
+### Suitable distributed lag model.
+
+Before this let us find the correlation between the series.
+
+```{r cor4}
+# Calculating the correlation coefficient
+cor(v_RBO_data_task_b_TS, v_RBO_Temp_task_b_TS)
+cor(v_RBO_data_task_b_TS, v_RBO_Rainfall_task_b_TS)
+cor(v_RBO_data_task_b_TS, v_RBO_Radiation_task_b_TS)
+cor(v_RBO_data_task_b_TS, v_RBO_RelHumidity_task_b_TS)
+```
+
+This suggests that RBO has a better correlation with Relative humidity and Rainfall.
+
+
+As we are going to forecast the RBO data, our dependent variable "y" will be Mortality Rate series object and independent variable "x" will be Relative humidity and Rainfall.
+
+For dlm model we need some modifications in the series.
+
+
+```{r data4}
+v_data_TS_44 <- ts(v_RBO_data_task_b, start = 1997, frequency = 1)
+colnames(v_data_TS_44) <- c("x1", "y", "x2", "x3", "x4", "x5")
+```
+
+
+## Dynamic model with Relative humidity
+
+```{r}
+v_rain_dyna_taskb <- dynlm(y ~ x5, data = data.frame(v_data_TS_44))
+summary(v_rain_dyna_taskb)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 0.6555       
+  R - squared is 0.05624
+  Adjusted R - squared is -0.02956  
+  Degrees of freedom - DF are (1, 11)
+  p - value (0.4353) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Dynamic linear model.
+
+
+No residual analysis is required.
+
+
+## Dynamic model with Rainfall
+
+```{r}
+v_rel_hum_dyna_taskb <- dynlm(y ~ x3, data = data.frame(v_data_TS_44))
+summary(v_rel_hum_dyna_taskb)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 0.3156        
+  R - squared is 0.02789
+  Adjusted R - squared is -0.06048   
+  Degrees of freedom - DF are (1, 11)
+  p - value (0.5855) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Dynamic linear model.
+
+No residual analysis is required.
+
+Since the model didn't fit on the two variables let us fit the remaining 2 variables also.
+
+## Dynamic model with Radiation
+
+```{r}
+v_rad_dyna_taskb <- dynlm(y ~ x4, data = data.frame(v_data_TS_44))
+summary(v_rad_dyna_taskb)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 0.05873        
+  R - squared is 0.005311
+  Adjusted R - squared is -0.08512  
+  Degrees of freedom - DF are (1, 11)
+  p - value (0.813) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Dynamic linear model.
+
+No residual analysis is required.
+
+
+## Dynamic model with Temperature
+
+```{r}
+v_temp_dyna_taskb <- dynlm(y ~ x2, data = data.frame(v_data_TS_44))
+summary(v_temp_dyna_taskb)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Dynamic linear model.
+  HA : The data fits the Dynamic linear model.
+
+Interpretations:
+  F - statistic is 0.3156        
+  R - squared is 0.02789
+  Adjusted R - squared is -0.06048   
+  Degrees of freedom - DF are (1, 11)
+  p - value (0.5855) is > 0.05 and therefore, it is not statistically significant. Therefore, Null hypothesis is not rejected.
+  Hence, the model does not fit the Dynamic linear model.
+
+No residual analysis is required.
+
+To forecast there is predictor variable that is fitted on the dynamic model.
+
+# Conclusion 
+
+## Task 1:
+
+The data columns are converted into the time series objects for each column in the data set. They all have seasonality in their series with no obvious trend, behavior or change in variance and with intervention points. 
+
+Mortality rate is stationary and hence it can be directly send to the models as it is a dependent variable. Similarly, all other variables becomes the independent variables or predictors. All the variables are stationary.
+
+Decomposition of components suggested that, the seasonality component is week and the trend component doesn't show any trend with the data.
+
+We got Mortality rate has a strong correlation with Chemical emission 1 and Particle size. Therefore, we use only these variables to fit the models.
+
+Now to find the best model we have three approaches.
+
+1. Suitable Dlag models and dynamic LM:
+  Since, we are doing multivariate analysis it is required to convert the entire data frame into time series. We sent the two correlated variables into the formula. The respective summary and residuals are analysed then.
+  
+  This approach only supports Finite dlm, AR dlm as well as dynamic model. But for polynomial and Koyck we fit predictors individualls they donot perform multivariate analysis.
+  
+  Here we got AR_DLM_solar_53 as the better model in terms of residual analysis as well as MASE scores. 
+  
+  Though dynamic model performed better, it suffered with randomness, normality and correlation to some extent.
+
+2. Smoothing methods:
+  
+  Since the Seasonality component is week we cannot get additive and multiplicative seasonality. The best model here obtained is the simple seasonality model.
+  
+3. State space model variations: 
+  Here we got ETS(M, N, N) as the best model automatically. it's mase score is high compared to other models but is efficient in case of BIC and AIC. It suffered with randomness, normality and correlation to some extent.
+
+But the MASE scores are shown least for smoothing model.
+
+So we considered this as the best model for forecasting the Mortality rate data for the next 4 weeks. From the 4 weeks forecast results we can predict that there will be decrease in the Mortality rate in the future. But as we forecast with 95% confidence intervals we cannot consider this as accurate.
+
+
+## Task 2:
+
+The data columns are converted into the time series objects for each column in the data set. They all have some obvious trend, behavior or change in variance and with intervention points leaving with no seasonality.
+
+First Flower Day series is stationary and hence it can be directly send to the models as it is a dependent variable. Similarly, all other variables becomes the independent variables or predictors. All the variables are stationary except Temperature and Radiation but it is not necessary to make them stationary.
+
+We got FFD has a strong correlation with Rainfall and Radiation comparitively. Therefore, we use only these variables to fit the models.
+
+Now to find the best model we have three approaches.
+
+1. Suitable Dlag models and dynamic LM:
+  Since, we are doing univariate analysis we will model predictors individually. Here, we also require to analysis the models by fitting them with and without slope. We sent each correlated variables into the formula. The respective summary and residuals are analysed then.
+  
+  This approach only supports Finite dlm, AR dlm as well as dynamic model.
+  
+  Here only three models are fitted.
+    
+    finite dlm with Temperature without slope.
+    finite dlm with Radiation without slope.
+    Dynamic model without slope with radiation.
+  
+  Without slope we got best results but they did not perform better with residuals. But dynamic model is better in terms of r squared.
+  
+  Though dynamic model performed better, it suffered with randomness, normality and correlation to some extent.
+
+2. Smoothing methods:
+  
+  Since there in no Seasonality in  the series cannot use additive and multiplicative seasonality. The best model here obtained is the simple seasonality model.
+  
+3. State space model variations: 
+  Here we got ETS(M, N, N) as the best model automatically. It's MASE score is high compared to other models but is efficient in case of BIC and AIC. It suffered with randomness, normality and correlation to some extent.
+
+Among all the methods, holt in exponential smoothing with damped trend. When compared with MASE, BIC and AIC score.
+
+So we considered this as the best model for forecasting the First Flower Day data for the next 3 years. From the 3 years forecast results we can predict that there will be decrease in the First Flower Day in the future. But as we forecast with 95% confidence intervals we cannot consider this as accurate.
+
+## Task 3:
+
+### Part (a):
+
+The data columns are converted into the time series objects for each column in the data set. They all have some obvious trend, behavior or change in variance and with intervention points leaving with no seasonality.
+
+Rank-based Order similarity metric series is stationary and hence it can be directly send to the models as it is a dependent variable. Similarly, all other variables becomes the independent variables or predictors. All the variables are stationary except Temperature and Radiation but it is not necessary to make them stationary.
+
+We got Rank-based Order similarity metric has a strong correlation with Rainfall and Temperature comparitively. Therefore, we use only these variables to fit the models.
+
+Now to find the best model we use Suitable Dlag models and dynamic LM:
+  
+  Since, we are doing univariate analysis we will model predictors individually. The respective summary and residuals are analysed then.
+  
+Here, the fitted models among each method with 2 different predictors are
+
+  1. "PolyDLM_model_Rain"
+  2. "AR_DLM_Rain_53"
+  3. "PolyDLM_model_temp"
+  4. "AR_DLM_temp_52"
+  5. "v_rain_dyna"
+
+Among the polynomial models temperature has the least MASE score compared. Whereas, AR_DLM has Rainfall and Dynamic has only one variable fit i.e., with rainfall.
+
+So we considered these as the best models for forecasting the Rank-based Order similarity metric data for the next 3 years. From the 3 years forecast results we can predict that there will be decrease in the Rank-based Order similarity metric in the future. But as we forecast with 95% confidence intervals we cannot consider this as accurate.
+
+### Part (b):
+
+The RBO data in Task 3 is filtered from 1997 to 2009 considering the millennium drought period.
+
+The data columns are converted into the time series objects for each column in the data set. They all have some obvious trend, behavior or change in variance and with intervention points leaving with no seasonality.
+
+Rank-based Order similarity metric series is stationary and hence it can be directly send to the models as it is a dependent variable. Similarly, all other variables becomes the independent variables or predictors. All the variables are stationary except for Radiation but it is not necessary to make them stationary.
+
+We got Rank-based Order similarity metric has a strong correlation with Relative humidity and Rainfall comparitively. Therefore, we use only these variables to fit the models.
+
+Now to find the best model we use only dynamic LM:
+  
+  Since, we are doing univariate analysis we will model predictors individually. The respective summary and residuals are analysed then.
+  
+  The model is not fit on both Relative humidity and Rainfall. Therefore, model is fitted on the other two variables too.
+  
+  No model is fitted on the data and hence no forecasting is done.

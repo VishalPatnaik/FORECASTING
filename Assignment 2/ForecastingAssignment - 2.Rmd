@@ -1,0 +1,985 @@
+---
+title: "ForecastingAssignment 2"
+author: "VISHAL PATNAIK DAMODARAPATRUNI - s3811521"
+date: "18/09/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+This analysis has two parts: 
+    Part 1: Forecasting Solar Radiation data.
+    Part 2: Correlation Analysis.
+    
+## Part 1:
+
+  Here, we will forecast the horizontal solar radiation data for the next two years using the best fit model. To get this best model we have three approaches.            
+    1. Suitable DL model fitting
+    2. Smoothing methods
+    3. State Space models
+    
+  The best model is the one that has the best MASE score as well as gives the best residual analysis.
+
+## Part 2:
+
+  The correlation strength is to be accessed among quarterly Residential Property Price Index (PPI) in Melbourne and quarterly population change over the previous quarter in Victoria and then check whether the relationship is spurious or not.
+
+# Method
+
+## Part 1
+
+The following packages are used by both Part 1 and Part 2.
+
+```{r Library, message=FALSE, warning=FALSE}
+library(dplyr)
+library(forecast) # Forecasting Functions for Time Series and Linear Models. [1] - https://cran.r-project.org/web/packages/forecast/index.html
+library(dLagM) # Distributed lag model.
+library(lmtest) # Testing Linear Regression Models. [2] - https://cran.r-project.org/web/packages/lmtest/index.html
+library(tidyr)
+library(tseries) # Time Series Analysis and Computational Finance.[3] - https://cran.r-project.org/web/packages/tseries/index.html
+library(fUnitRoots) # To analyze trends and unit roots in financial time series. [4] - https://cran.r-project.org/web/packages/fUnitRoots/index.html
+library(expsmooth) # Forecasting with Exponential Smoothing. [5] - https://cran.r-project.org/web/packages/expsmooth/index.html
+library(TSA) # Time Series Analysis.
+library(urca) # Unit Root and Cointegration Tests. [7] - https://cran.r-project.org/web/packages/urca/index.html
+library(readr)
+```
+
+## Data
+
+The data here used is the monthly average horizontal solar radiation and the monthly precipitation series measured at the same points between January 1960 and December 2014.
+
+```{r DataLoading}
+v_Task1_data <- read.csv("data1.csv", header = TRUE)
+head(v_Task1_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_Task1_data)
+```
+
+Checking for Missing values.
+
+```{r scan 1}
+colSums(is.na(v_Task1_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_solar_data. (It should be a data frame.)
+
+```{r class}
+class(v_Task1_data)
+```
+
+```{r TS}
+v_solar_radiation_TS <- ts(v_Task1_data$solar, start = c(1960, 1), frequency = 12)
+v_precipitation_TS <- ts(v_Task1_data$ppt, start = c(1960, 1), frequency = 12)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class}
+class(v_precipitation_TS) 
+class(v_solar_radiation_TS)
+```
+
+Now let us perform descriptive analysis on each time series object.
+
+## Descriptive Analysis
+
+### Solar radiation
+
+```{r plotTS_Rad}
+plot(v_solar_radiation_TS, type = "b", xlab = "years", ylab = "Radiation amount", main = "Time series plot for solar radiation from 1960-1 to 2014-12 (660 months)", pch = 1)
+legend("topright", inset = .03, title = "Radiation amount", legend = "Solar radiation series", horiz = TRUE, cex = 0.7, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+points(v_solar_radiation_TS, x = time(v_solar_radiation_TS), pch = as.vector(season(v_solar_radiation_TS)))
+```
+
+Fig 1.1: Solar radiation - Time series plot.
+
+```{r MT_Rad}
+McLeod.Li.test(y = v_solar_radiation_TS, main = "McLeod-Li Test Statistics for Solar radiation.")
+```
+
+Fig 1.2: McLeod-Li Test Statistics for Solar radiation.
+
+Descriptive analysis
+
+1.	From fig1, we can observe that there is no trend in the data.
+2.  There is an intervention around the years, 1965 and 1967.
+3.	From fig1, we can conclude that there is seasonality in the series.
+4.  It has lower values in the months of January and December, where as the higher values in the months of June and July. This shows that there is no consistency across the observed period of time. 
+4.  Therefore, there is no change Autoregressive and moving average behaviour.
+5.	Also, we cannot see change in variance.
+
+### Precipitation
+
+```{r plotTS_Pres}
+plot(v_precipitation_TS, type = "b", xlab = "years", ylab = "Precipitation", main = "Time series plot for monthly precipitation from 1960-1 to 2014-12 (660 months)", pch = 1)
+legend("topleft", inset = .03, title = "Precipitation", legend = "Precipitation series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+points(v_precipitation_TS, x = time(v_precipitation_TS), pch = as.vector(season(v_precipitation_TS)))
+```
+
+Fig 1.3: Solar radiation - Time series plot.
+
+```{r MT_Pres}
+McLeod.Li.test(y = v_precipitation_TS, main = "McLeod-Li Test Statistics for Precipitation.")
+```
+
+Fig 1.4: McLeod-Li Test Statistics for Precipitation.
+
+Descriptive analysis
+
+1.	From fig1, we can observe that there is no trend in the data.
+2.  There are no obvious intervention points in the series.
+3.	From fig1, we can conclude that there is seasonality in the series.
+4.  It has lower values in the months of August and September, where as the higher values in the months of January and December. This shows that there is no consistency across the observed period of time. 
+4.  Therefore, there is no change Autoregressive and moving average behaviour.
+5.	Also, we cannot see change in variance.
+
+
+## Checking for Stationary in the series
+
+```{r Stationary}
+# Function to check Stationary on the series. 
+Stationary_Check <- function(x, m1, m2) {
+  
+  # Analysing trends by plotting ACF and PACF.
+  par(mfrow = c(1,2))
+  acf(x, main = m1)
+  pacf(x, main = m2)
+  
+  # Lag for ADF test
+  d = ar(x)$order
+  
+  # Conducting Augmented Dickey-Fuller test.
+  adf.test(x, k = d)
+}
+```
+
+Checking for Stationary on Solar Radiation series.
+
+```{r Rad_Stationary}
+Stationary_Check(v_solar_radiation_TS, "Solar Radiation - ACF plot", "Solar Radiation - PACF plot")
+```
+
+Fig 1.5: Solar Radiation - ACF
+Fig 1.6: Solar Radiation - ACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : ~ 0.01 < 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Solar Radiation series is Stationary.
+
+Checking for Stationary on Precipitation data.
+
+```{r Pres_Stationary}
+Stationary_Check(v_precipitation_TS, "Precipitation - ACF plot", "Precipitation - PACF plot")
+```
+
+Fig 1.7: Precipitation - ACF
+Fig 1.8: Precipitation - PACF
+
+The seasonal pattern in the significant lags suggests that there is no trend in the series.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.07769 > 0.05 
+
+p - value is less than 0.05 and hence the test is statistically significant. Therefore, we Null hypothesis can be rejected i.e., The data is stationary.
+
+Therefore, the Precipitation series is Stationary.
+
+Therefore, no differentiation is required. As the two series are stationary.
+
+## Suitable distributed lag model.
+
+Before this let us find the correlation between the two series.
+
+```{r cor}
+# Calculating the correlation coefficient between solar radiation and precipitation.
+cor(v_solar_radiation_TS, v_precipitation_TS)
+```
+
+This suggests that there is a negative correlation between the series.
+
+```{r DataLoading1}
+v_prep_fore_data <- read.csv("data.x.csv", header = TRUE)
+head(v_prep_fore_data)
+```
+
+
+```{r TS2}
+v_prep_fore_TS <- ts(v_prep_fore_data , start = c(2015, 1), frequency = 12)
+v_prep_fore_TS
+```
+
+As we are going to forecast the solar radiation data our dependent variable "x" will be solar radiation series object and independent variable "y" will be precipitation data.
+
+### Finite distributed lag model
+
+```{r Dlag}
+x = v_precipitation_TS # Independent variable
+y = v_solar_radiation_TS # Dependent variable
+
+
+for ( i in 1:10){
+  model_1 = dlm(x = as.vector(x) , y = as.vector(y), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model), "MASE =", MASE(model_1)$MASE, "\n")
+  }
+```
+
+As we have the least AIC and BIC values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_solar}
+# Finite lag length based on AIC-BIC
+
+finite_dlm_solar_rad = dlm( x = as.vector(x) , y = as.vector(y), q = 10)
+summary(finite_dlm_solar_rad)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model.
+  HA : The data fits the Finite distributed lag model.
+
+Interpretations:
+  F - statistic is 25.82 
+  R - squared is 0.3081
+  Adjusted R - squared is 0.2962
+  Degrees of freedom - DF are (11, 638)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Finite distributed lag model.
+
+This model suggests that there is only 29.62% of data variance. Suggesting that the model explains only 29.62% of the trend. Which implies that the model shows some trend.
+
+### Residual analysis
+
+```{r analysisfunc}
+# Function for residual analysis.
+
+res_analysis <- function(res_m) {
+  
+    par(mfrow = c(2, 2))
+    # Scatter plot for model residuals
+    plot(res_m, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Standardized Residuals", main = "Plot of Residuals over Time")
+
+    abline(h = 0)
+    
+    # Standard distribution
+    hist(res_m, xlab = 'Standardized Residuals', freq = FALSE)
+    curve(dnorm(x, mean = mean(res_m), sd = sd(res_m)), col = "red", lwd = 2, add = TRUE, yaxt = "n")
+    
+    # QQplot for model residuals
+    qqnorm(res_m, col = c("blue"))
+    qqline(res_m)
+    
+    # Auto-Correlation Plot
+    acf(res_m, main = "ACF of Standardized Residuals",col=c("blue"))
+    
+    # Shapiro Wilk test
+    shapiro.test(res_m)
+  
+}
+```
+
+
+
+```{r dlm_res}
+res_analysis(residuals(finite_dlm_solar_rad$model))
+```
+
+Residual Analysis for Finite DLM:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+### Polynomial distributed lag model
+
+```{r}
+for (i in 1:3){
+  model_2 <-  polyDlm(x = as.vector(x) , y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model),"\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_solar}
+# Ploynomial DLM
+
+PolyDLM_model_solar = polyDlm(x = as.vector(x), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model_solar)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 53.72 
+  R - squared is 0.2479
+  Adjusted R - squared is 0.2433
+  Degrees of freedom - DF are (4, 652)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 24.33% of data variance. Suggesting that the model explains only 24.33% of the trend. Which implies that the model shows some trend.
+
+
+## Residual analysis
+
+```{r polydlm_res}
+res_analysis(residuals(PolyDLM_model_solar$model))
+```
+
+Residual Analysis for Polynomial DLM:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+This analysis is not enough and we still require a better model than this. Therefore, let us fit Koyck model.
+
+### Koyck model
+
+```{r koyck_COPPER}
+# Koyk DLM
+
+Koyck_DLM_solar = koyckDlm(x = as.vector(x) , y = as.vector(y))
+summary(Koyck_DLM_solar)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Wald test statistic is 1104 
+  R - squared is 0.7598
+  Adjusted R - squared is 0.7591
+  Degrees of freedom - DF are (2, 656)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Koyck distributed lag model.
+
+This model suggests that there is only 75.91% of data variance. Suggesting that the model explains only 75.91% of the trend. Which implies that the model performs better on the series data when compared to the former values.
+
+Now let us perform residual analysis.
+
+## Residual analysis
+
+```{r Koyckdlm_res}
+res_analysis(residuals(Koyck_DLM_solar))
+```
+
+Residual Analysis for Koyck DLM:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise. Also, ACF shows seasonality pattern.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+So far this is the best model but let us fit ardlDlm model to check whether it fits better than Koyck model or not.
+
+### Autoregressive distributed lag model
+
+```{r}
+for (i in 1:5){
+  for(j in 1:5){
+    model_4 = ardlDlm(x = as.vector(x) , y = as.vector(y), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model), "MASE =", MASE(model_4)$MASE, "\n")
+  }
+}
+```
+
+p = 3, 4, 5 and q = 5 has the least AIC, BIC and MASE scores. 
+
+```{r ardlm_solar_35}
+# ARDLM model
+AR_DLM_solar_35 = ardlDlm(x = as.vector(x) , y = as.vector(y), p = 3 , q = 5)
+summary(AR_DLM_solar_35)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 1003 
+  R - squared is 0.9333
+  Adjusted R - squared is 0.9324 
+  Degrees of freedom - DF are (9, 645)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 93.24% of data variance. Suggesting that the model explains only 93.24% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r ardlm_solar_35_res}
+res_analysis(residuals(AR_DLM_solar_35))
+```
+
+Residual Analysis for AR_DLM_solar_35:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit AR_DLM_solar_45 model.
+
+
+```{r ardlm_solar_45}
+# ARDLM model
+AR_DLM_solar_45 = ardlDlm(x = as.vector(x) , y = as.vector(y), p = 4 , q = 5)
+summary(AR_DLM_solar_45)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 908.5  
+  R - squared is 0.9338
+  Adjusted R - squared is 0.9328 
+  Degrees of freedom - DF are (10, 644)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 93.28% of data variance. Suggesting that the model explains only 93.28% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r ardlm_solar_45_res}
+res_analysis(residuals(AR_DLM_solar_45))
+```
+
+Residual Analysis for AR_DLM_solar_45:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Now let us fit AR_DLM_solar_55 model.
+
+```{r ardlm_solar_55}
+# ARDLM model
+AR_DLM_solar_55 = ardlDlm(x = as.vector(x) , y = as.vector(y), p = 5, q = 5)
+summary(AR_DLM_solar_55)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 824.9 
+  R - squared is 0.9338
+  Adjusted R - squared is 0.9327
+  Degrees of freedom - DF are (11, 643)
+  p - value (~ 0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 93.27% of data variance. Suggesting that the model explains only 93.27% of the trend. Which implies that the model shows some trend.
+
+
+Now let us perform residual analysis.
+
+### Residual analysis
+
+```{r ardlm_solar_55_res}
+res_analysis(residuals(AR_DLM_solar_55))
+```
+
+Residual Analysis for AR_DLM_solar_55:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+Among all the models ARDML models shown better performance and among them AR_DLM_solar_45 shows better trend.
+
+Now let us calculate AIC, BIC and MASE scores and store them in a dataframe to check the better model based on MASE score.
+
+```{r}
+attr(Koyck_DLM_solar$model, "class") = "lm"
+attr(AR_DLM_solar_35$model, "class") = "lm"
+attr(AR_DLM_solar_45$model, "class") = "lm"
+attr(AR_DLM_solar_55$model, "class") = "lm"
+
+v_model_name <- c("finite_dlm_solar_rad", "PolyDLM_model_solar", "Koyck_DLM_solar", "AR_DLM_solar_35", "AR_DLM_solar_45", "AR_DLM_solar_55")
+```
+
+
+```{r warning=FALSE}
+MASE <- MASE(finite_dlm_solar_rad$model, PolyDLM_model_solar$model, Koyck_DLM_solar$model, AR_DLM_solar_35$model, AR_DLM_solar_45$model, AR_DLM_solar_55$model)$MASE
+
+aic <- AIC(finite_dlm_solar_rad$model, PolyDLM_model_solar$model, Koyck_DLM_solar$model, AR_DLM_solar_35$model, AR_DLM_solar_45$model, AR_DLM_solar_55$model)$AIC
+
+bic <- BIC(finite_dlm_solar_rad$model, PolyDLM_model_solar$model, Koyck_DLM_solar$model, AR_DLM_solar_35$model, AR_DLM_solar_45$model, AR_DLM_solar_55$model)$BIC
+```
+
+
+```{r score}
+v_score <- data.frame(v_model_name, MASE, aic, bic)
+colnames(v_score) <- c("MODEL_NAME", "MASE", "AIC", "BIC")
+v_score
+```
+
+Therefore, AR_DLM_solar_45 is the better model.
+
+## Exponential Smoothing
+
+As there is a strong seasonal component in the solar radiation series. Let us consider models that have only additive or multiplicative seasonality.
+
+Here we have 6 smoothing methods.
+
+```{r}
+exponential = c(T,F)
+seasonality <- c("additive", "multiplicative")
+damped <- c(T,F)
+exp <- expand.grid(exponential, seasonality, damped)
+exp <- exp[-c(1,5),]
+fit_aic <- array(NA, 6)
+fit_bic <- array(NA, 6)
+fit_mase <- array(NA, 6)
+levels <- array(NA, dim=c(6,3))
+for (i in 1:6){
+  hw <- hw(v_solar_radiation_TS, exponential = exp[i,1], seasonal = toString(exp[i,2], damped = exp[i,3]))
+  fit_aic[i] <- hw$model$aic
+  fit_bic[i] <- hw$model$bic
+  fit_mase[i] <- accuracy(hw)[6]
+  levels[i,1] <- exp[i,1]
+  levels[i,2] <- toString(exp[i,2])
+  levels[i,3] <- exp[i,3]
+  res_analysis(residuals(hw))
+}
+```
+
+### Residual Analysis for each seasonality component method.
+
+Residual Analysis Holt-Winters' Additive Method: (1)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+
+
+Residual Analysis Holt-Winters' multiplicative method with exponential trend: (2)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is not seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There is only one significant lag in Autocorrelation.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+
+
+Residual Analysis Holt-Winters' multiplicative method: (3)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is not seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There is only one significant lag in Autocorrelation.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+
+
+Residual Analysis Holt-Winters' additive method: (4)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+
+Residual Analysis Holt-Winters' multiplicative method with exponential trend: (5)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is not seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There is only one significant lag in Autocorrelation.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+
+Residual Analysis Holt-Winters' multiplicative method: (6)
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is not seen.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There is only one significant lag in Autocorrelation.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+  
+
+Therefore, this damped results show some changes from the previous analysis but not much. Overall, Holt-Winters’ multiplicative methods shows better auto correlation and seasonality. 
+
+Let us now append the scores of these smoothing models with our previous scores data frame.
+
+```{r}
+values <- data.frame(levels, fit_mase, fit_aic, fit_bic)
+colnames(values) <- c("Trend", "Seasonality", "Damped", "MASE", "AIC", "BIC")
+values$Trend <- factor(values$Trend, levels = c(T,F), labels = c("multiplicative","additive"))
+values$Damped <- factor(values$Damped, levels = c(T,F), labels = c("damped","N"))
+values <- unite(values, col = "MODEL_NAME", c("Trend","Seasonality","Damped"))
+
+v_score1 <- rbind(v_score, values)
+v_score1
+```
+
+## State Space Model Variations
+
+Here we have 8 State Space Model Variations.
+
+```{r}
+var <- c("AAA", "MAA", "MAM", "MMM")
+damps <- c(T,F)
+ets_models <- expand.grid(var, damps)
+ets_aic <- array(NA, 8)
+ets_mase <- array(NA,8)
+ets_bic <- array(NA,8)
+mod <- array(NA, dim=c(8,2))
+for (i in 1:8){
+  ets <- ets(v_solar_radiation_TS , model = toString(ets_models[i, 1]), damped = ets_models[i,2])
+  ets_aic[i] <- ets$aic
+  ets_bic[i] <- ets$bic
+  ets_mase[i] <- accuracy(ets)[6]
+  mod[i,1] <- toString(ets_models[i,1])
+  mod[i,2] <- ets_models[i,2]
+}
+```
+
+Let us find the best ets model.
+
+```{r}
+v_ets_fit <- ets(v_solar_radiation_TS)
+summary(v_ets_fit)
+```
+
+ETS(A, AD, A)
+
+A - Additive errors
+
+Ad - Additive damped trend
+
+A - Additive seasonality.
+
+Let us perform residual analysis on this ETS model.
+
+```{r}
+res_analysis(residuals(v_ets_fit))
+```
+
+Residual Analysis ETS(A, AD, A):
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is some normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+  5. p - value (~ 0.01) from Shapiro-Wilk normality test is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected. Suggesting some normality.
+
+Let us now append the scores of these State Space Model with our previous scores data frame.
+
+```{r}
+measures <- data.frame(mod, ets_mase, ets_aic, ets_bic)
+measures$X2 <- factor(measures$X2, levels = c(T,F), labels = c("Damped","N"))
+measures <- unite(measures, "MODEL_NAME", c("X1","X2"))
+colnames(measures) <- c("MODEL_NAME", "MASE", "AIC", "BIC")
+v_score2 <- rbind(v_score1, measures)
+
+v_score2 <- arrange(v_score2, MASE)
+
+v_score2
+```
+
+The additive_multiplicative_damped model is better in terms of MASE score. Therefore let us 
+
+## Forecasting
+
+Let us forecast for the next 2 years on Solar radiation series. From 2016 to 2017.
+
+```{r Fore}
+fit <- hw(v_solar_radiation_TS, seasonal = "multiplicative", h = 2*frequency(v_solar_radiation_TS))
+
+v_solar_forecasts <- ts.intersect(ts(fit1$lower[, 2], start = c(2015, 1), frequency = 12), ts(fit1$mean, start = c(2015, 1), frequency = 12), ts(fit1$upper[, 2], start = c(2015, 1), frequency = 12))
+colnames(v_solar_forecasts) <- c("Lower bound", "Point forecast", "Upper bound")
+
+v_solar_forecasts
+```
+
+Now let us plot the forecast.
+
+```{r Fore1}
+plot(fit, fcol = "white", main = "Forecast of Solar radiation series for the next 2 years (2016, 2017)", ylab = "Solar Radiation")
+lines(fitted(fit), col = "red")
+lines(fit$mean, col = "blue", lwd = 2)
+legend("bottom", inset = .03, cex = 0.9, box.lty = 2, box.lwd = 2, pch = 1, lty = 1, col = c("red", "blue"), c("Data", "Forecasts"))
+```
+
+Fig 1.9: Next 2 year forecast on the Solar Radiation Series.
+
+From the two year forecast results we can predict that there will be decrease in the Solar Radiation in the future.
+
+## Part 2
+
+## Data
+
+The data here used is quarterly Residential Property Price Index (PPI) in Melbourne and quarterly population change over the previous quarter in Victoria between September 2003 and December 2016
+
+```{r Data}
+v_Task2_data <- read.csv("data2.csv")
+head(v_Task2_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_Task2_data)
+```
+
+
+Checking Missing values.
+
+```{r scan1}
+colSums(is.na(v_Task2_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_Task2_data. (It should be data frame.)
+
+```{r class1}
+class(v_Task2_data)
+```
+
+
+
+```{r TS1}
+v_PPI_change_TS <- ts(v_Task2_data$price , start = c(2003, 3), frequency = 4)
+v_population_change_TS <- ts(v_Task2_data$change, start = c(2003, 3), frequency = 4)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class1}
+class(v_PPI_change_TS) 
+class(v_population_change_TS)
+```
+
+Now let us visualize each time series object.
+
+## Descriptive analysis 
+
+### Property Price Index
+
+```{r plotTS_PC}
+plot(v_PPI_change_TS, type = "b", xlab = "years", ylab = "Population Price index", main = "Residential Property Price Index from 2003-3 to 2016-4 (54 Quarters)", pch = 1)
+legend("bottomright", inset = .03, title = "Population Price Index", legend = "Population Price Index series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.1: Residential Property Price Index - Time series plot.
+
+```{r MT_PPI}
+McLeod.Li.test(y = v_PPI_change_TS, main = "McLeod-Li Test Statistics for Residential Population price index")
+```
+
+Fig 2.2: McLeod-Li Test Statistics for Residential Population price index.
+
+Descriptive analysis
+
+1.	From fig1, we can observe an upward trend.
+2.	There is no seasonality in the series. 
+3.  The series show Autoregressive and moving average behavior.
+4.	From the plot we cannot see a change in variance.
+5.  There is no obvious intervention in the data.
+
+### Population Change
+
+```{r plotTS_Pop}
+plot(v_population_change_TS, type = "b", xlab = "years", ylab = "Population Change", main = "Population Change from 2003-3 to 2016-4 (54 Quarters)", pch = 1)
+legend("bottomright", inset = .03, title = "Population Change", legend = "Population Change series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 2.3: Population change - Time series plot.
+
+```{r MT_pop}
+McLeod.Li.test(y = v_population_change_TS, main = "McLeod-Li Test Statistics for Population Change")
+```
+
+Fig 2.4: McLeod-Li Test Statistics for Population Change.
+
+Descriptive analysis
+
+1.	From fig1, we can observe an upward trend.
+2.	There is seasonality in the series with higher values in the first quarter and lower values in the second quarter. 
+3.  The series doesn't clearly show Autoregressive and moving average behavior.
+4.	We cannot see an change in variance.
+5.  There is some intervention in the data across the year.
+
+From the two plots we can observe there is some correlation in the data. Let us analyze the correlation between both the series by plotting the series sample with cross correlation function (CCF).
+
+
+## Correlation Analysis
+
+```{r corr}
+ccf(as.vector(v_PPI_change_TS), as.vector(v_population_change_TS), ylab = "CCF", main = "PPI vs Population Change")
+```
+
+Fig 2.4: CCF plot
+
+The plot suggests that there is a strong correlation between Residential Property Price Index (PPI) in Melbourne and population change Victoria. Also, We can clearly see that the lags are significantly different from zero based on 1.96/n−√ bounds.
+
+## Checking for Stationary in the series
+
+```{r Stationary1}
+# Function to check Stationary on the series. 
+Stationary_Check <- function(x, m1, m2) {
+  
+  # Analysing trends by plotting ACF and PACF.
+  par(mfrow = c(1,2))
+  acf(x, main = m1)
+  pacf(x, main = m2)
+  
+  # Conducting Augmented Dickey-Fuller test.
+  adf.test(x)
+}
+```
+
+Checking for Stationary on Property Price Index
+
+```{r PPI_Stationary}
+Stationary_Check(v_PPI_change_TS, "Property Price Index - ACF", "Property Price Index - PACF")
+```
+
+Fig 2.6: Population Price Index - ACF
+Fig 2.7: Population Price Index - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the Property Price Index trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.8458 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Therefore, the property price index series is non - stationary.
+
+Checking for Stationary on Population change
+
+```{r pop_Stationary}
+Stationary_Check(v_population_change_TS, "Population Change - ACF", "Population Change - PACF")
+```
+
+Fig 2.8: Population Change - ACF
+Fig 2.9: Popolation Change - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the GOLD price trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.7344 > 0.05 
+
+p - value is greater than 0.05 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Therefore, the Population change series is non - stationary.
+
+The two series are not stationary with high auto - correlation between them. This strong auto correlation makes it difficult in assessing the dependency between the series. To separate this strong correlationship between the series we will apply pre-whitening.
+
+## Prewhitening
+
+Here, we will first make the data stationary by differencing the series. Our previous analysis suggests that we should do both the regular and seasonal differentiation to make sure that both the data has the same length. 
+
+```{r Whitening}
+v_diff <- ts.intersect(diff(diff(v_PPI_change_TS, 4)), diff(diff(v_population_change_TS, 4)))
+prewhiten(as.vector(v_diff[, 1]), as.vector(v_diff[, 2]), ylab = 'CCF', main = "Prewhitened CFF")
+```
+
+Fig 2.10: Pre Whitening
+
+Now the data is stationary and there is no significant correlation between the two series. Therefore, we can conclude that the strong cross correlation is spurious.
+
+# Conclusion 
+
+## Part 1
+
+The data columns are converted into the time series objects of Solar Radiation and Precipitation respectively. Both have seasonality in their series with no obvious trend, behavior or change in variance. 
+
+Solar Radiation is stationary and hence it can me directly send to the models as it is a dependent variable. Similarly, Precipitation being the independent variable there is no need to make it stationary.
+
+Also, we got negative correlation among the series.
+
+Now to find the best model we have three approaches.
+
+1. Suitable Dlag models:
+  Here we got AR_DLM_solar_45 as the better model in terms of residual analysis as well as MASE scores. But it suffered with randomness, normality and correlation to some extent.
+
+2. Smoothing methods:
+  Here the better model method is Holt-Winters’ multiplicative method in terms of residual analysis as well as MASE scores.
+  
+3. State space model variations: 
+  Here we got ETS(A, Ad, A) as the best model automatically. But it suffered with randomness, normality and correlation to some extent.
+  But the MASE scores are shown least for Holt-Winters’ multiplicative method.
+
+So we considered this as the best model for forecasting the solar radiation data for the nest 2 years. From the two year forecast results we can predict that there will be decrease in the Solar Radiation in the future. But as we forecast with 95% confidence intervals we cannot consider this as accurate.
+
+
+## Part 2:
+
+The data columns are converted into the time series objects of Property Price Index and Population Change respectively. 
+
+Population Change has seasonality in their series with no obvious trend, behavior or change in variance. 
+
+Both the series are Non - Stationary.
+
+There is a strong correlation between the two series.
+
+Two check whether this relationship is spurious or not we performed pre whitening. This resulted it there are no strong correlation bonds between the two series. Therefore, we acn conclude that the relationship between Residential Property Price Index (PPI) in Melbourne and quarterly population change over the previous quarter in Victoria between September 2003 and December 2016 is spurious.

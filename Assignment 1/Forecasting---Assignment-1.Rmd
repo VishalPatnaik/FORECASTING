@@ -1,0 +1,615 @@
+---
+title: "Untitled"
+author: "VISHAL PATNAIK DAMODARAPATRUNI - s3811521"
+date: "17/08/2021"
+output: word_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The ASX data consists the monthly changes in all ordinaries (Ords) Price Index, Gold price (AUD),  Crude Oil (Brent, USD/bbl) and Copper (USD/tonne) for 161 months, starting from 2004. This data is converted to Time series data.
+
+Here, the time series data is analyzed for presence of stationary as well as the impact of components on the series data, then the respective models are fit on the series data to find the best model.
+
+# Scope
+
+This analysis has three parts: 
+    Part 1: Checking for Non - Stationary
+    Part 2: Impact of components on the series data
+    Part 3: Identifying the best fit model for ASX price index
+
+## Part 1:
+
+Identifying the trend and change in variance which makes the series stationary. Finally, performing Augumented Dicky Fuller test that says whether the series is stationary or not.
+
+## Part 2:
+
+Using suitable decomposition method analyse the impact of individual components on the series data.
+
+## Part 3:
+
+Finding the suitable distributed lag model among different models that best fits the ASX price index series.
+
+# Method
+
+Using the below packages (forecast, TSA, tseries, expsmooth, funitRoots etc.) the time series data is visualized and analysed based on the stationarity and the decomposed components. Then the best distributed lag model for the ASX price index is selected.
+
+```{r Library, message=FALSE, warning=FALSE}
+library(expsmooth) # Forecasting with Exponential Smoothing. [1] - https://cran.r-project.org/web/packages/expsmooth/index.html
+library(dplyr)
+library(forecast) # Forecasting Functions for Time Series and Linear Models. [2] - https://cran.r-project.org/web/packages/forecast/index.html
+library(tseries) # Time Series Analysis and Computational Finance.[3] - https://cran.r-project.org/web/packages/tseries/index.html
+library(fUnitRoots) # To analyze trends and unit roots in financial time series. [4] - https://cran.r-project.org/web/packages/fUnitRoots/index.html
+library(TSA) # Time Series Analysis.
+library(urca) # Unit Root and Cointegration Tests. [5] - https://cran.r-project.org/web/packages/urca/index.html
+library(readr)
+library(dLagM) # Distributed lag model.
+library(VIF)
+```
+
+# Data
+
+The data is the monthly averages of all ordinaries (Ords) Price Index, Gold price (AUD),  Crude Oil (Brent, USD/bbl) and Copper (USD/tonne). The data starts from 2004 and ends after 161 months. The dataset is in csv format and hence it is loaded using "read.csv()" function.
+
+```{r DataLoading}
+v_ASX_data <- read.csv("ASX_data.csv", header = TRUE)
+head(v_ASX_data)
+```
+
+
+```{r}
+# Using str() to check the type of each column.
+str(v_ASX_data)
+```
+
+As the columns Gold.price and Copper_USD.tonne are in char format, which are supposed to be numeric. Now let us convert them into numeric format. For this let us remove "," before converting.
+
+```{r}
+# Removing Commas
+v_ASX_data$Gold.price = gsub(",","", v_ASX_data$Gold.price)
+v_ASX_data$Copper_USD.tonne = gsub(",","", v_ASX_data$Copper_USD.tonne)
+
+# Converting char to numeric
+v_ASX_data$Gold.price = as.numeric(as.character(v_ASX_data$Gold.price))
+v_ASX_data$Copper_USD.tonne = as.numeric(as.character(v_ASX_data$Copper_USD.tonne))
+```
+
+
+```{r}
+str(v_ASX_data)
+```
+
+Checking Missing values.
+
+```{r scan 1}
+colSums(is.na(v_ASX_data))
+```
+
+There are no missing values in the data.
+
+Checking the class of v_ASX_data. (It should be data frame.)
+
+```{r class}
+class(v_ASX_data)
+```
+
+Converting each column into different time series objects. Here, I am taking start (2004, 1) because the data is monthly and is from 2004. Also, end (2017, 5) because there are 161 observations indicating 161 months which gives 13 years and 5 months. Frequency is 12 as there are 12 months in an year.
+
+```{r TS}
+v_ASX_price_TS <- ts(v_ASX_data$ASX.price, start = c(2004, 1), end = c(2017, 5), frequency = 12)
+v_GOLD_price_TS <- ts(v_ASX_data$Gold.price, start = c(2004, 1), end = c(2017, 5), frequency = 12)
+v_CRUDE_price_TS <- ts(v_ASX_data$Crude.Oil..Brent._USD.bbl, start = c(2004, 1), end = c(2017, 5), frequency = 12)
+v_COPPER_price_TS <- ts(v_ASX_data$Copper_USD.tonne, start = c(2004, 1), end = c(2017, 5), frequency = 12)
+```
+
+Confirming the class of each time series object.
+
+```{r TS_Class}
+class(v_ASX_price_TS) 
+class(v_GOLD_price_TS)
+class(v_CRUDE_price_TS)
+class(v_COPPER_price_TS)
+```
+
+Now let us visualize each time series object.
+
+# ASX price
+
+```{r plotTS_ASX}
+plot(v_ASX_price_TS, type = "b", xlab = "years", ylab = "Price index", main = "ASX price change from 2004-1 to 2017-5 (161 months)", pch = 1)
+legend("bottomright", inset = .03, title = "ASX price", legend = "ASX price series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 1: ASX price change - Time series plot.
+
+```{r MT_ASX}
+McLeod.Li.test(y = v_ASX_price_TS, main = "McLeod-Li Test Statistics for ASX price index")
+```
+
+Fig 2: McLeod-Li Test Statistics for ASX price index.
+
+Descriptive analysis
+
+1.	From fig1, we can observe an upward trend in the plot until 2017 with an intervention in the year 2008.
+2.	The ASX price series shows Autoregressive and moving average behaviour.
+3.	From fig1, we can conclude that there is no seasonality in the series. 
+4.	From fig1 and fig2, we can see there a change in variance.
+
+# GOLD price
+
+```{r plotTS_GOLD}
+plot(v_GOLD_price_TS, type = "b", xlab = "years", ylab = "Price index", main = "GOLD price change from 2004-1 to 2017-5 (161 months)", pch = 1)
+legend("bottomright", inset = .03, title = "GOLD price", legend = "GOLD price series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+
+Fig 3: Gold price change - Time series plot.
+
+```{r MT_GOLD}
+McLeod.Li.test(y = v_GOLD_price_TS, main = "McLeod-Li Test Statistics for GOLD price index")
+```
+
+Fig 4: McLeod-Li Test Statistics for GOLD price index.
+
+Descriptive analysis
+
+1.	From fig1, we can observe an upward trend in the plot until 2017 with no intervention in the trend.
+2.	The GOLD price series shows Autoregressive and moving average behaviour.
+3.	From fig1, we can conclude that there is no seasonality in the series. 
+4.	From fig1 and fig2, we can see a change in variance.
+
+
+# CRUDE price
+
+```{r plotTS_CRUDE}
+plot(v_CRUDE_price_TS, type = "b", xlab = "years", ylab = "Price index", main = "CRUDE OIL price change from 2004-1 to 2017-5 (161 months)", pch = 1)
+legend("topright", inset = .03, title = "CRUDE OIL price", legend = "CRUDE OIL price series", horiz = TRUE, cex = 0.7, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+
+Fig 5: Crude Oil price change - Time series plot.
+
+```{r MT_CRUDE}
+McLeod.Li.test(y = v_CRUDE_price_TS, main = "McLeod-Li Test Statistics for CRUDE price index")
+```
+-
+Fig 6: McLeod-Li Test Statistics for CRUDE price index.
+
+Descriptive analysis
+
+1.	From fig1, we can observe an upward trend in the plot until 2007 with an intervention in the year 2008 and again an upward trent till 2012 which later followed a downward patern. 
+2.	The CRUDE price series shows Autoregressive and moving average behaviour.
+3.	From fig1, we can conclude that there is no seasonality in the series. 
+4.	From fig1 and fig2, we can see there is a change in variance.
+
+
+# COPPER price
+
+```{r plotTS_COPPER}
+plot(v_COPPER_price_TS, type = "b", xlab = "years", ylab = "Price index", main = "COPPER price change from 2004-1 to 2017-5 (161 months)", pch = 1)
+legend("bottomright", inset = .03, title = "COPPER price", legend = "COPPER price series", horiz = TRUE, cex = 0.8, lty = 1, box.lty = 2, box.lwd = 2, pch = 1)
+```
+
+Fig 7: COPPER price change - Time series plot.
+
+```{r MT_COPPER}
+McLeod.Li.test(y = v_COPPER_price_TS, main = "McLeod-Li Test Statistics for COPPER price index")
+```
+
+Fig 6: McLeod-Li Test Statistics for COPPER price index.
+
+Descriptive analysis
+
+1.	From fig1, we can observe that the trend is almost similar to COPPER series following an upward trend until 2008 with an intervention in the year 2009 and again an upward trend till 2011 which later followed a downward patern. 
+2.	The COPPER price series shows Autoregressive and moving average behaviour.
+3.	From fig1, we can conclude that there is no seasonality in the series. 
+4.	From fig1 and fig2, we can see there is a change in variance.
+
+
+## The existence of Non - Stationary
+
+```{r Stationary}
+# Function to check Stationary on the series. 
+Stationary_Check <- function(x) {
+  
+  # Analysing trends by plotting ACF and PACF.
+  par(mfrow = c(1,2))
+  acf(x, main = "Price change - ACF")
+  pacf(x, main = "Price change - PACF")
+  
+  # Conducting Augmented Dickey-Fuller test.
+  adf.test(x)
+}
+```
+
+Checking for Stationary on ASX price
+
+```{r ASX_Stationary}
+Stationary_Check(v_ASX_price_TS)
+```
+
+Fig 9: ASX price change - ACF
+Fig 10: ASX price change - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the ASX price trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.2846 > 0.5 
+
+p - value is greater than 0.5 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Also, as there is change in variance suggesting that the series is not stationary.
+
+Therefore, the ASX price series is non - stationary.
+
+Checking for Stationary on GOLD price
+
+```{r GOLD_Stationary}
+Stationary_Check(v_GOLD_price_TS)
+```
+
+Fig 11: GOLD price change - ACF
+Fig 12: GOLD price change - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the GOLD price trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.6444 > 0.5 
+
+p - value is greater than 0.5 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Also, as there is change in variance suggesting that the series is not stationary.
+
+Therefore, the GOLD price series is non - stationary.
+
+Checking for Stationary on CRUDE price
+
+```{r CRUDE_Stationary}
+Stationary_Check(v_CRUDE_price_TS)
+```
+
+Fig 13: CRUDE price change - ACF
+Fig 14: CRUDE price change - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the CRUDE price trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.6379 > 0.5 
+
+p - value is greater than 0.5 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Also, as there is change in variance suggesting that the series is not stationary.
+
+Therefore, the CRUDE price series is non - stationary.
+
+Checking for Stationary on COPPER price
+
+```{r COPPER_Stationary}
+Stationary_Check(v_COPPER_price_TS)
+```
+
+Fig 15: COPPER price change - ACF
+Fig 16: COPPER price change - PACF
+
+The decrease in the ACF plot and a high peak in the PACF plot in the beginning, suggests that there is some pattern in the COPPER price trend.
+
+Hypotheses :
+  H0 : The data is not stationary.
+  HA : The data is stationary.
+
+Interpretations:
+  p - value : 0.472 > 0.5 
+
+p - value is greater than 0.5 and hence the test is not statistically significant. Therefore, we fail to reject Null hypothesis i.e., The data is not stationary.
+
+Also, as there is change in variance suggesting that the series is not stationary.
+
+Therefore, the COPPER price series is non - stationary.
+
+## Impact of components on each time series.
+
+The components of a series are usually,
+
+  1. Seasonality
+  2. Trend
+  3. Remainder
+
+We should decompose the time series into the above components as we can see the impact of these components on the series data.
+
+For this STL decomposition is used, as there is intervention in some of the series. This intervention is might be due to outliers and STL decomposition is robust in the case of outliers.
+
+Decomposing ASX price series into components.
+
+```{r ASX_STL} 
+v_ASX_stl_decomp <- stl(v_ASX_price_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_ASX_stl_decomp, main = "Decomposing ASX price Series into components")
+```
+
+Fig 17: Decomposing ASX price series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series as stated earlier.
+  2. The trend in the series data is shown exactly by the trend component.
+  3. Remainder component shows a high intervention point around 2008 depicting the real time global financial effect.
+
+Decomposing GOLD price series into components.
+
+```{r GOLD_STL} 
+v_GOLD_stl_decomp <- stl(v_GOLD_price_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_GOLD_stl_decomp, main = "Decomposing GOLD price Series into components")
+```
+
+Fig 18: Decomposing GOLD price series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series as stated earlier.
+  2. The trend in the series data is shown exactly by the trend component.
+  3. Remainder component shows a high intervention point at multiple points.
+
+Decomposing CRUDE price series into components.
+
+```{r CRUDE_STL} 
+v_CRUDE_stl_decomp <- stl(v_CRUDE_price_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_CRUDE_stl_decomp, main = "Decomposing CRUDE price Series into components")
+```
+
+Fig 19: Decomposing CRUDE price series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series as stated earlier.
+  2. The trend in the series data is shown exactly by the trend component.
+  3. Remainder component shows a high intervention point in 2008 depicting the real time global financial effect.
+
+Decomposing COPPER price series into components.
+
+```{r COPPER_STL} 
+v_COPPER_stl_decomp <- stl(v_COPPER_price_TS, t.window = 15, s.window = "periodic", robust = TRUE) 
+plot(v_COPPER_stl_decomp, main = "Decomposing COPPER price Series into components")
+```
+
+Fig 20: Decomposing COPPER price series into components - stl decomposition.
+
+  1. The seasonal adjusted series is not meaningful in this case as it much deviated from the original series. Suggesting that there is no seasonality in the series as stated earlier.
+  2. The trend in the series data is shown exactly by the trend component.
+  3. Remainder component shows a high intervention point around 2008 depicting the real time global financial effect.
+
+## Suitable distributed lag model for ASX price index.
+
+# Finite distributed lag model
+
+```{r Dlag}
+x = v_COPPER_price_TS # Independent variable1
+z = v_GOLD_price_TS # Independent variable2
+y = v_ASX_price_TS # Dependent variable
+
+
+for ( i in 1:10){
+  model_1 = dlm(x = as.vector(x) , y = as.vector(y), q = i )
+  cat("q = ", i, "AIC = ", AIC(model_1$model), "BIC = ", BIC(model_1$model),"\n")
+  }
+```
+
+As we have the least AIC and BIC values at q = 10. Let us fit the finite distributed lag model with q = 10.
+
+```{r dlag_COPPER}
+# Finite lag length based on AIC-BIC
+
+finite_dlm = dlm( x = as.vector(x) , y = as.vector(y), q = 10)
+summary(finite_dlm)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Finite distributed lag model.
+  HA : The data fits the Finite distributed lag model.
+
+Interpretations:
+  F - statistic is 3.024
+  R - squared is 0.1931
+  Adjusted R - squared is 0.1292
+  Degrees of freedom - DF are (11, 139)
+  p - value (0.001201) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Finite distributed lag model.
+
+This model suggests that there is only 19.31% of data variance. Suggesting that the model explains only 19.31% of the trend. Which implies that the model shows some trend.
+
+## Residual analysis
+
+```{r analysisfunc, echo = FALSE}
+# Function for residual analysis.
+
+res_analysis <- function(res_m) {
+  
+    # Scatter plot for model residuals
+    plot(res_m, type = "b", pch = 19, col = "blue", xlab = "years", ylab = "Standardized Residuals", main = "Plot of Residuals over Time")
+
+    abline(h = 0)
+    
+    # Standard distribution
+    hist(res_m, xlab = 'Standardized Residuals', freq = FALSE)
+    curve(dnorm(x, mean = mean(res_m), sd = sd(res_m)), col = "red", lwd = 2, add = TRUE, yaxt = "n")
+    
+    # QQplot for model residuals
+    qqnorm(res_m, col = c("blue"))
+    qqline(res_m)
+    
+    # Auto-Correlation Plot
+    acf(res_m, main = "ACF of Standardized Residuals",col=c("blue"))
+}
+```
+
+
+
+```{r dlm_res}
+res_analysis(residuals(finite_dlm$model))
+```
+
+Residual Analysis for Finite DLM:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric and requires some transformation to make it symmetric. This suggests the non - stationary in the series.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is no normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+
+Therefore, Further analysis is needed by adding polynomial to the lag model.
+
+# Polynomial distributed lag model
+
+```{r}
+for (i in 1:3){
+  model_2 <-  polyDlm(x = as.vector(x) , y = as.vector(y), q = i , k = i, show.beta = FALSE)
+  cat("q = ", i, "k = ", i, "AIC = ", AIC(model_2$model), "BIC = ", BIC(model_2$model),"\n")
+}
+```
+
+Let us fit a polynomial model of order 3. Since least AIC and BIC scores.
+
+```{r polydlag_COPPER}
+# Ploynomial DLM
+
+PolyDLM_model = polyDlm(x = as.vector(x), y = as.vector(y), q = 3, k = 3, show.beta = TRUE)
+summary(PolyDLM_model)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Polynomial distributed lag model.
+  HA : The data fits the Polynomial distributed lag model.
+
+Interpretations:
+  F - statistic is 14.39
+  R - squared is 0.2733
+  Adjusted R - squared is 0.2543 
+  Degrees of freedom - DF are (4, 153)
+  p - value (0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Polynomial distributed lag model.
+
+This model suggests that there is only 27.33% of data variance. Suggesting that the model explains only 27.33% of the trend. Which implies that the model shows some trend.
+
+
+## Residual analysis
+
+```{r polydlm_res}
+res_analysis(residuals(PolyDLM_model$model))
+```
+
+Residual Analysis for Polynomial DLM:
+
+  1. The data points are below the line at the start and below the line at the end of the trend. Randomness is seen to some extent. So, we cannot decide anything at this stage. Further analysis is required.
+  2. From normal distribution curve, the distribution is almost symmetric and requires some transformation to make it symmetric. This suggests the non - stationary in the series.
+  3. The data at the tails is deviated more leaving some part on the line suggesting there is no normality in the trend.
+  4. There are significant lags in Autocorrelation plot suggesting that the stochastic component is not white noise.
+
+This analysis is not enough and we still require a better model than this. Therefore, let us fit Koyck model.
+
+# Koyck model
+
+```{r koyck_COPPER}
+# Koyk DLM
+
+Koyck_DLM = koyckDlm(x = as.vector(x) , y = as.vector(y))
+summary(Koyck_DLM)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Koyck distributed lag model.
+  HA : The data fits the Koyck distributed lag model.
+
+Interpretations:
+  Walt test - statistic is 1448
+  R - squared is 0.9485
+  Adjusted R - squared is 0.9479
+  Degrees of freedom - DF are (2, 157)
+  p - value (0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Koyck distributed lag model.
+
+This model suggests that there is only 94.85% of data variance. Suggesting that the model explains only 94.85% of the trend. Which implies that the model performs better on the series data.
+
+Now let us perform residual analysis.
+
+## Residual analysis
+
+```{r Koyckdlm_res}
+res_analysis(residuals(Koyck_DLM))
+```
+
+Residual Analysis for Koyck DLM:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+
+So far this is the best model but let us fit ardlDlm model to check whether it fits better than Koyck model or not.
+
+# Autoregressive distributed lag model
+
+```{r}
+for (i in 1:10){
+  for(j in 1:5){
+    model_4 = ardlDlm(x = as.vector(x) , y = as.vector(y), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model_4$model), "BIC = ", BIC(model_4$model),"\n")
+  }
+}
+```
+
+p = 10 and q = 1 has the least AIC and BIC scores. 
+
+```{r ardlm_COPPER}
+# ARDLM model
+
+AR_DLM = ardlDlm(x = as.vector(x) , y = as.vector(y), p = 10 , q = 1 )
+summary(AR_DLM)
+```
+
+Hypotheses :
+  H0 : The data doesn′t fit the Autoregressive distributed lag model.
+  HA : The data fits the Autoregressive distributed lag model.
+
+Interpretations:
+  F - statistic is 194.9
+  R - squared is 0.9443
+  Adjusted R - squared is 0.9394
+  Degrees of freedom - DF are (12, 138)
+  p - value (0.01) is < 0.05 and therefore, it is statistically significant. Therefore, Null hypothesis is rejected.
+  Hence, the model fits the Autoregressive distributed lag model.
+
+This model suggests that there is only 94.43% of data variance. Suggesting that the model explains only 94.43% of the trend. Which implies that the model shows some trend.
+
+Let us perform residual analysis on this model.
+
+## Residual analysis
+
+```{r ardlm_res}
+res_analysis(residuals(AR_DLM))
+```
+
+Residual Analysis for Auto Regressive DLM:
+
+  1. The data points are below the line at both the start and end of the trend. Randomness is not seen here.
+  2. From normal distribution curve, the distribution is almost symmetric. This suggests a good fit with a very few data falling outside the normal curve indicating Kurtosis.
+  3. The data at the tails is deviated but is normal for most part of the line suggesting normality in the trend.
+  4. There are no significant lags in Autocorrelation plot suggesting that the stochastic component is white noise.
+
+Even though Auto Regressive DLM shown better performance, Koyck model fits better with 94.85% variance.
+
+
+# Conclusion 
+
+Finally, we can conclude that,
+
+  1. The series data is non - stationary.
+  2. The components like trend, remainder and seasonality effected the stationarity of the series data.
+  3. The best fit DLM model is Koyck model with r-squared of 0.9485.
